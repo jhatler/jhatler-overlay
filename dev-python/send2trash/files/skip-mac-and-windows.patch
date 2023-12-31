@@ -1,0 +1,63 @@
+--- a/send2trash/win/__init__.py	2023-12-24 00:21:03.730987167 -0500
++++ b/send2trash/win/__init__.py	2023-12-24 00:21:01.740966021 -0500
+@@ -6,15 +6,17 @@
+ 
+ from __future__ import unicode_literals
+ from platform import version
++from sys import platform
+ 
+-# if windows is vista or newer and pywin32 is available use IFileOperation
+-if int(version().split(".", 1)[0]) >= 6:
+-    try:
+-        # Attempt to use pywin32 to use IFileOperation
+-        from send2trash.win.modern import send2trash
+-    except ImportError:
++if platform == "win32":
++    # if windows is vista or newer and pywin32 is available use IFileOperation
++    if int(version().split(".", 1)[0]) >= 6:
++        try:
++            # Attempt to use pywin32 to use IFileOperation
++            from send2trash.win.modern import send2trash
++        except ImportError:
++            # use SHFileOperation as fallback
++            from send2trash.win.legacy import send2trash
++    else:
+         # use SHFileOperation as fallback
+-        from send2trash.win.legacy import send2trash
+-else:
+-    # use SHFileOperation as fallback
+-    from send2trash.win.legacy import send2trash  # noqa: F401
++        from send2trash.win.legacy import send2trash  # noqa: F401
+--- a/send2trash/mac/__init__.py	2023-12-24 00:20:54.850914368 -0500
++++ b/send2trash/mac/__init__.py	2023-12-24 00:20:58.590933692 -0500
+@@ -5,16 +5,18 @@
+ # http://www.hardcoded.net/licenses/bsd_license
+ 
+ from platform import mac_ver
+-from sys import version_info
++from sys import version_info, platform
+ 
+-# NOTE: version of pyobjc only supports python >= 3.6 and 10.9+
+-macos_ver = tuple(int(part) for part in mac_ver()[0].split("."))
+-if version_info >= (3, 6) and macos_ver >= (10, 9):
+-    try:
+-        from send2trash.mac.modern import send2trash
+-    except ImportError:
+-        # Try to fall back to ctypes version, although likely problematic still
+-        from send2trash.mac.legacy import send2trash
+-else:
+-    # Just use the old version otherwise
+-    from send2trash.mac.legacy import send2trash  # noqa: F401
++if platform == "darwin":
++    # NOTE: version of pyobjc only supports python >= 3.6 and 10.9+
++    macos_ver = tuple(int(part) for part in mac_ver()[0].split("."))
++
++    if version_info >= (3, 6) and macos_ver >= (10, 9):
++        try:
++            from send2trash.mac.modern import send2trash
++        except ImportError:
++            # Try to fall back to ctypes version, although likely problematic still
++            from send2trash.mac.legacy import send2trash
++    else:
++        # Just use the old version otherwise
++        from send2trash.mac.legacy import send2trash  # noqa: F401
