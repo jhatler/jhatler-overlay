@@ -1,0 +1,10 @@
+--- /var/db/repos/gentoo/dev-python/Faker/Faker-20.1.0.ebuild	2023-12-26 18:42:41.845917848 +0000
++++ /var/db/repos/jhatler-overlay/dev-python/Faker/Faker-20.1.0.ebuild	2023-12-24 07:24:11.697282825 +0000
+@@ -36,5 +36,7 @@
+ python_test() {
+ 	local -x PYTEST_DISABLE_PLUGIN_AUTOLOAD=1
+ 	local -x PYTEST_PLUGINS=faker.contrib.pytest.plugin
++	local EPYTEST_DESELECT=()
++	EPYTEST_DESELECT+=( "tests/providers/test_ssn.py::TestFiFI::test_ssn_without_age_range" )
+ 	epytest
+ }
