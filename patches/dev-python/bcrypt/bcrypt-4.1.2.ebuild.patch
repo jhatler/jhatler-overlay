@@ -1,0 +1,11 @@
+--- /var/db/repos/gentoo/dev-python/bcrypt/bcrypt-4.1.2.ebuild	2024-01-01 00:23:56.025903312 +0000
++++ /var/db/repos/jhatler-overlay/dev-python/bcrypt/bcrypt-4.1.2.ebuild	2024-01-01 11:01:03.395901553 +0000
+@@ -88,3 +88,8 @@
+ QA_FLAGS_IGNORED="usr/lib.*/py.*/site-packages/bcrypt/_bcrypt.*.so"
+ 
+ distutils_enable_tests pytest
++
++python_test() {
++	local -x PYTEST_DISABLE_PLUGIN_AUTOLOAD=1
++	epytest
++}
