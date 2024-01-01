@@ -1,0 +1,11 @@
+--- a/setup.py	2023-12-25 19:19:03.141196994 -0000
++++ b/setup.py	2023-12-25 19:19:23.107864784 -0000
+@@ -21,7 +21,7 @@
+ from setuptools.command.sdist import sdist
+ 
+ 
+-CYTHON_DEPENDENCY = 'Cython(>=0.29.36,<0.30.0)'
++CYTHON_DEPENDENCY = 'Cython(>=0.29.36)'
+ MACHINE = platform.machine()
+ MODULES_CFLAGS = [os.getenv('UVLOOP_OPT_CFLAGS', '-O2')]
+ _ROOT = pathlib.Path(__file__).parent
