@@ -1,0 +1,10 @@
+--- /var/db/repos/gentoo/sys-devel/libtool/libtool-2.4.7-r1.ebuild	2023-12-26 18:42:43.165917923 +0000
++++ /var/db/repos/jhatler-overlay/sys-devel/libtool/libtool-2.4.7-r1.ebuild	2024-01-01 00:41:29.449295689 +0000
+@@ -45,6 +45,7 @@
+ 	"${FILESDIR}"/${PN}-2.4.6-darwin-use-linux-version.patch
+ 	"${FILESDIR}"/${PN}-2.4.7-werror-lto.patch
+ 	"${FILESDIR}"/${PN}-2.4.7-grep-3.8.patch
++	"${FILESDIR}"/${PN}-2.4.7-disable-lto-link-order2.patch
+ )
+ 
+ src_prepare() {
