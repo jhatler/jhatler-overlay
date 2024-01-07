@@ -1,0 +1,69 @@
+From 177da2645946ce4a5e8b50f5fb7b7f67e291f9ce Mon Sep 17 00:00:00 2001
+From: Emmanuele Bassi <ebassi@gnome.org>
+Date: Sun, 24 Dec 2023 23:12:37 +0000
+Subject: [PATCH] scanner: Limit the relative imports
+
+---
+ giscanner/ast.py     | 6 ++----
+ giscanner/message.py | 6 +++---
+ 2 files changed, 5 insertions(+), 7 deletions(-)
+
+diff --git a/giscanner/ast.py b/giscanner/ast.py
+index ad94f437..c66c8217 100644
+--- a/giscanner/ast.py
++++ b/giscanner/ast.py
+@@ -24,10 +24,8 @@ import operator
+ from itertools import chain
+ from collections import OrderedDict
+ 
+-from . import message
+-
+ from .sourcescanner import CTYPE_TYPEDEF, CSYMBOL_TYPE_TYPEDEF
+-from .message import Position
++from .message import Position, warn
+ from .utils import to_underscores
+ 
+ 
+@@ -779,7 +777,7 @@ class Function(Callable):
+         # Returns GType
+         rettype = self.retval.type
+         if (not rettype.is_equiv(TYPE_GTYPE) and rettype.target_giname != 'Gtk.Type'):
+-            message.warn("function '%s' returns '%r', not a GType" % (self.name, rettype))
++            warn("function '%s' returns '%r', not a GType" % (self.name, rettype))
+             return False
+ 
+         return True
+diff --git a/giscanner/message.py b/giscanner/message.py
+index 72e446d2..70e993b9 100644
+--- a/giscanner/message.py
++++ b/giscanner/message.py
+@@ -23,7 +23,7 @@ import os
+ import sys
+ import operator
+ 
+-from . import utils
++from .utils import break_on_debug_flag
+ 
+ (WARNING,
+  ERROR,
+@@ -133,7 +133,7 @@ class MessageLogger(object):
+         Log a warning, using optional file positioning information.
+         If the warning is related to a ast.Node type, see log_node().
+         """
+-        utils.break_on_debug_flag('warning')
++        break_on_debug_flag('warning')
+ 
+         self._warning_count += 1
+ 
+@@ -179,7 +179,7 @@ class MessageLogger(object):
+         self._output.write(text)
+ 
+         if log_type == FATAL:
+-            utils.break_on_debug_flag('fatal')
++            break_on_debug_flag('fatal')
+             raise SystemExit(text)
+ 
+     def log_node(self, log_type, node, text, context=None, positions=None):
+-- 
+2.43.0
+
