@@ -1,0 +1,31 @@
+From e0a5ac97f6bb86755df8236c6ccb9324971af889 Mon Sep 17 00:00:00 2001
+From: root <root@akrolf516z33>
+Date: Sun, 7 Jan 2024 10:54:22 +0000
+Subject: [PATCH] Python 3.12 support
+
+---
+ testenv/server/http/http_server.py | 7 ++++---
+ 1 file changed, 4 insertions(+), 3 deletions(-)
+
+diff --git a/testenv/server/http/http_server.py b/testenv/server/http/http_server.py
+index 2cc82fb..58769bf 100644
+--- a/testenv/server/http/http_server.py
++++ b/testenv/server/http/http_server.py
+@@ -47,10 +47,11 @@ class HTTPSServer(StoppableHTTPServer):
+                                                os.getenv('srcdir', '.'),
+                                                'certs',
+                                                'server-key.pem'))
+-        self.socket = ssl.wrap_socket(
++
++        context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
++        context.load_cert_chain(certfile=CERTFILE, keyfile=KEYFILE)
++        self.socket = context.wrap_socket(
+             sock=socket.socket(self.address_family, self.socket_type),
+-            certfile=CERTFILE,
+-            keyfile=KEYFILE,
+             server_side=True
+         )
+         self.server_bind()
+-- 
+2.43.0
+
