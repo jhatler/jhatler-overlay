@@ -1,0 +1,3790 @@
+diff --git a/dom/bindings/mozwebidlcodegen/test/test_mozwebidlcodegen.py b/dom/bindings/mozwebidlcodegen/test/test_mozwebidlcodegen.py
+index 10129022e6..a2202f7b24 100644
+--- a/dom/bindings/mozwebidlcodegen/test/test_mozwebidlcodegen.py
++++ b/dom/bindings/mozwebidlcodegen/test/test_mozwebidlcodegen.py
+@@ -2,7 +2,6 @@
+ # License, v. 2.0. If a copy of the MPL was not distributed with this
+ # file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ 
+-import imp
+ import io
+ import json
+ import os
+@@ -12,7 +11,7 @@ import tempfile
+ import unittest
+ 
+ import mozpack.path as mozpath
+-from mozfile import NamedTemporaryFile
++from mozfile import NamedTemporaryFile, load_source
+ from mozunit import MockedOpen, main
+ from mozwebidlcodegen import WebIDLCodegenManager, WebIDLCodegenManagerState
+ 
+@@ -242,7 +241,7 @@ class TestWebIDLCodegenManager(unittest.TestCase):
+         with NamedTemporaryFile("wt") as fh:
+             fh.write("# Original content")
+             fh.flush()
+-            mod = imp.load_source("mozwebidlcodegen.fakemodule", fh.name)
++            mod = load_source("mozwebidlcodegen.fakemodule", fh.name)
+             mod.__file__ = fake_path
+ 
+             args = self._get_manager_args()
+diff --git a/netwerk/dns/prepare_tlds.py b/netwerk/dns/prepare_tlds.py
+index 53d0bf526d..adebcec487 100644
+--- a/netwerk/dns/prepare_tlds.py
++++ b/netwerk/dns/prepare_tlds.py
+@@ -4,11 +4,10 @@
+ 
+ import codecs
+ import encodings.idna
+-import imp
+-import os
+ import re
+ import sys
+-from make_dafsa import words_to_cxx, words_to_bin
++
++from make_dafsa import words_to_bin, words_to_cxx
+ 
+ """
+ Processes a file containing effective TLD data.  See the following URL for a
+@@ -22,7 +21,6 @@ http://wiki.mozilla.org/Gecko:Effective_TLD_Service
+ 
+ def getEffectiveTLDs(path):
+     file = codecs.open(path, "r", "UTF-8")
+-    entries = []
+     domains = set()
+     for line in file:
+         # line always contains a line terminator unless the file is empty
+diff --git a/python/mach/mach/main.py b/python/mach/mach/main.py
+index 9ab880341d..570e3c6500 100644
+--- a/python/mach/mach/main.py
++++ b/python/mach/mach/main.py
+@@ -8,16 +8,18 @@
+ import argparse
+ import codecs
+ import errno
+-import imp
+ import logging
+ import os
+ import sys
++import types
+ import traceback
+ import uuid
+ from collections.abc import Iterable
+ from pathlib import Path
+ from typing import Dict, List, Union
+ 
++from mozfile import load_source
++
+ from .base import (
+     CommandContext,
+     FailedCommandError,
+@@ -267,13 +269,13 @@ To see more help for a specific command, run:
+             # Ensure parent module is present otherwise we'll (likely) get
+             # an error due to unknown parent.
+             if "mach.commands" not in sys.modules:
+-                mod = imp.new_module("mach.commands")
++                mod = types.ModuleType("mach.commands")
+                 sys.modules["mach.commands"] = mod
+ 
+             module_name = f"mach.commands.{uuid.uuid4().hex}"
+ 
+         try:
+-            imp.load_source(module_name, str(path))
++            load_source(module_name, str(path))
+         except IOError as e:
+             if e.errno != errno.ENOENT:
+                 raise
+diff --git a/python/mach/mach/test/test_entry_point.py b/python/mach/mach/test/test_entry_point.py
+index 1129eba476..11aa083cda 100644
+--- a/python/mach/mach/test/test_entry_point.py
++++ b/python/mach/mach/test/test_entry_point.py
+@@ -1,8 +1,8 @@
+ # This Source Code Form is subject to the terms of the Mozilla Public
+ # License, v. 2.0. If a copy of the MPL was not distributed with this
+ # file, You can obtain one at http://mozilla.org/MPL/2.0/.
+-import imp
+ import sys
++import types
+ from pathlib import Path
+ from unittest.mock import patch
+ 
+@@ -38,7 +38,7 @@ class TestEntryPoints(TestBase):
+         # Ensure parent module is present otherwise we'll (likely) get
+         # an error due to unknown parent.
+         if "mach.commands" not in sys.modules:
+-            mod = imp.new_module("mach.commands")
++            mod = types.ModuleType("mach.commands")
+             sys.modules["mach.commands"] = mod
+ 
+         mock.return_value = [Entry([self.provider_dir])]
+diff --git a/python/mozboot/mozboot/base.py b/python/mozboot/mozboot/base.py
+index c32946c4eb..9f4a81ca01 100644
+--- a/python/mozboot/mozboot/base.py
++++ b/python/mozboot/mozboot/base.py
+@@ -170,13 +170,6 @@ class BaseBootstrapper(object):
+         to the user, if necessary.
+         """
+ 
+-    def suggest_install_distutils(self):
+-        """Called if distutils.{sysconfig,spawn} can't be imported."""
+-        print(
+-            "Does your distro require installing another package for distutils?",
+-            file=sys.stderr,
+-        )
+-
+     def suggest_install_pip3(self):
+         """Called if pip3 can't be found."""
+         print(
+diff --git a/python/mozboot/mozboot/bootstrap.py b/python/mozboot/mozboot/bootstrap.py
+index 9957fa8db4..7e1a95b62f 100644
+--- a/python/mozboot/mozboot/bootstrap.py
++++ b/python/mozboot/mozboot/bootstrap.py
+@@ -491,22 +491,6 @@ class Bootstrapper(object):
+ 
+     def _validate_python_environment(self, topsrcdir):
+         valid = True
+-        try:
+-            # distutils is singled out here because some distros (namely Ubuntu)
+-            # include it in a separate package outside of the main Python
+-            # installation.
+-            import distutils.spawn
+-            import distutils.sysconfig
+-
+-            assert distutils.sysconfig is not None and distutils.spawn is not None
+-        except ImportError as e:
+-            print("ERROR: Could not import package %s" % e.name, file=sys.stderr)
+-            self.instance.suggest_install_distutils()
+-            valid = False
+-        except AssertionError:
+-            print("ERROR: distutils is not behaving as expected.", file=sys.stderr)
+-            self.instance.suggest_install_distutils()
+-            valid = False
+         pip3 = to_optional_path(which("pip3"))
+         if not pip3:
+             print("ERROR: Could not find pip3.", file=sys.stderr)
+diff --git a/python/mozboot/mozboot/debian.py b/python/mozboot/mozboot/debian.py
+index 34e328586e..63b47a2f03 100644
+--- a/python/mozboot/mozboot/debian.py
++++ b/python/mozboot/mozboot/debian.py
+@@ -17,13 +17,6 @@ class DebianBootstrapper(LinuxBootstrapper, BaseBootstrapper):
+         self.dist_id = dist_id
+         self.codename = codename
+ 
+-    def suggest_install_distutils(self):
+-        print(
+-            "HINT: Try installing distutils with "
+-            "`apt-get install python3-distutils`.",
+-            file=sys.stderr,
+-        )
+-
+     def suggest_install_pip3(self):
+         print(
+             "HINT: Try installing pip3 with `apt-get install python3-pip`.",
+diff --git a/python/mozboot/setup.py b/python/mozboot/setup.py
+index 234650dc8a..7b12c1c0c5 100644
+--- a/python/mozboot/setup.py
++++ b/python/mozboot/setup.py
+@@ -2,7 +2,10 @@
+ # License, v. 2.0. If a copy of the MPL was not distributed with this file,
+ # You can obtain one at http://mozilla.org/MPL/2.0/.
+ 
+-from distutils.core import setup
++try:
++    from setuptools import setup
++except ImportError:
++    from distutils.core import setup
+ 
+ VERSION = "0.1"
+ 
+diff --git a/python/mozbuild/mozbuild/configure/__init__.py b/python/mozbuild/mozbuild/configure/__init__.py
+index 0f33ecaedd..1a4c493d8d 100644
+--- a/python/mozbuild/mozbuild/configure/__init__.py
++++ b/python/mozbuild/mozbuild/configure/__init__.py
+@@ -928,7 +928,7 @@ class ConfigureSandbox(dict):
+     def wraps(self, func):
+         return wraps(func)
+ 
+-    RE_MODULE = re.compile("^[a-zA-Z0-9_\.]+$")
++    RE_MODULE = re.compile(r"^[a-zA-Z0-9_\.]+$")
+ 
+     def imports_impl(self, _import, _from=None, _as=None):
+         """Implementation of @imports.
+diff --git a/python/mozbuild/mozbuild/mach_commands.py b/python/mozbuild/mozbuild/mach_commands.py
+index 2297d586b8..c00afd1c01 100644
+--- a/python/mozbuild/mozbuild/mach_commands.py
++++ b/python/mozbuild/mozbuild/mach_commands.py
+@@ -29,6 +29,7 @@ from mach.decorators import (
+     SettingsProvider,
+     SubCommand,
+ )
++from mozfile import load_source
+ from voluptuous import All, Boolean, Required, Schema
+ 
+ import mozbuild.settings  # noqa need @SettingsProvider hook to execute
+@@ -1099,11 +1100,10 @@ def android_gtest(
+ 
+     # run gtest via remotegtests.py
+     exit_code = 0
+-    import imp
+ 
+     path = os.path.join("testing", "gtest", "remotegtests.py")
+-    with open(path, "r") as fh:
+-        imp.load_module("remotegtests", fh, path, (".py", "r", imp.PY_SOURCE))
++    load_source("remotegtests", path)
++
+     import remotegtests
+ 
+     tester = remotegtests.RemoteGTests()
+diff --git a/python/mozbuild/mozbuild/nodeutil.py b/python/mozbuild/mozbuild/nodeutil.py
+index 8ec724ab89..42f2627cd9 100644
+--- a/python/mozbuild/mozbuild/nodeutil.py
++++ b/python/mozbuild/mozbuild/nodeutil.py
+@@ -5,14 +5,14 @@
+ import os
+ import platform
+ import subprocess
+-from distutils.version import StrictVersion
+ 
+ from mozboot.util import get_tools_dir
+ from mozfile import which
++from packaging.version import Version
+ from six import PY3
+ 
+-NODE_MIN_VERSION = StrictVersion("12.22.12")
+-NPM_MIN_VERSION = StrictVersion("6.14.16")
++NODE_MIN_VERSION = Version("12.22.12")
++NPM_MIN_VERSION = Version("6.14.16")
+ 
+ 
+ def find_node_paths():
+@@ -68,7 +68,7 @@ def check_executable_version(exe, wrap_call_with_node=False):
+             .lstrip("v")
+             .rstrip()
+         )
+-    return StrictVersion(out)
++    return Version(out)
+ 
+ 
+ def find_node_executable(
+@@ -87,7 +87,7 @@ def find_node_executable(
+             return None, None
+ 
+         if version >= min_version:
+-            return nodejs_exe, version.version
++            return nodejs_exe, version.release
+ 
+         return None, None
+ 
+@@ -123,4 +123,4 @@ def find_executable(name, min_version, use_node_for_version_check=False):
+     if version < min_version:
+         return None, None
+ 
+-    return exe, version.version
++    return exe, version.release
+diff --git a/python/mozbuild/mozbuild/shellutil.py b/python/mozbuild/mozbuild/shellutil.py
+index 36665cf4b1..fab3ae6086 100644
+--- a/python/mozbuild/mozbuild/shellutil.py
++++ b/python/mozbuild/mozbuild/shellutil.py
+@@ -35,7 +35,7 @@ UNQUOTED_TOKENS_RE = _tokens2re(
+ DOUBLY_QUOTED_TOKENS_RE = _tokens2re(
+     quote='"',
+     backslashedquote=r'\\"',
+-    special="\$",
++    special=r"\$",
+     backslashed=r'\\[^\\"]',
+ )
+ 
+diff --git a/python/mozbuild/mozbuild/util.py b/python/mozbuild/mozbuild/util.py
+index c1f24445ea..1c25ce16b2 100644
+--- a/python/mozbuild/mozbuild/util.py
++++ b/python/mozbuild/mozbuild/util.py
+@@ -1252,7 +1252,7 @@ def pairwise(iterable):
+     return zip(a, b)
+ 
+ 
+-VARIABLES_RE = re.compile("\$\((\w+)\)")
++VARIABLES_RE = re.compile(r"\$\((\w+)\)")
+ 
+ 
+ def expand_variables(s, variables):
+diff --git a/python/mozrelease/mozrelease/versions.py b/python/mozrelease/mozrelease/versions.py
+index e3e47d4e4a..169d2899af 100644
+--- a/python/mozrelease/mozrelease/versions.py
++++ b/python/mozrelease/mozrelease/versions.py
+@@ -3,10 +3,58 @@
+ # file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ 
+ import re
+-from distutils.version import StrictVersion
+ 
+ from looseversion import LooseVersion
++from packaging.version import Version
+ 
++class StrictVersion:
++    def __init__(self, vstring):
++        self.parse(vstring)
++
++    def __repr__(self):
++        return "%s ('%s')" % (self.__class__.__name__, str(self))
++
++    def __eq__(self, other):
++        return self._cmp(other) == 0
++
++    def __lt__(self, other):
++        return self._cmp(other) < 0
++
++    def parse(self, vstring):
++        match = self.version_re.match(vstring)
++        if not match:
++            raise InvalidVersion("invalid version number '%s'" % vstring)
++
++        major, minor, patch, pre, pre_num = match.group(1, 2, 4, 5, 6)
++        self.version = int(major), int(minor), int(patch or 0)
++        self.pre = (pre[0], int(pre_num)) if pre else ()
++
++    def __str__(self):
++        return ".".join(map(str, self.version)) + (
++            "".join(map(str, self.pre)) if self.pre else ""
++        )
++
++    def _cmp(self, other):
++        if isinstance(other, str):
++            other = StrictVersion(other)
++        elif not isinstance(other, StrictVersion):
++            raise NotImplementedError
++
++        if self.version < other.version:
++            return -1
++        elif self.version == other.version:
++            if self.pre == other.pre:
++                return 0
++            elif not self.pre:
++                return 1
++            elif not other.pre:
++                return -1
++            elif self.pre < other.pre:
++                return -1
++            else:
++                return 1
++        else:
++            return 1
+ 
+ class MozillaVersionCompareMixin:
+     def __cmp__(self, other):
+@@ -17,12 +65,12 @@ class MozillaVersionCompareMixin:
+         has_esr = set()
+         if isinstance(other, LooseModernMozillaVersion) and str(other).endswith("esr"):
+             # If other version ends with esr, coerce through MozillaVersion ending up with
+-            # a StrictVersion if possible
++            # a Version if possible
+             has_esr.add("other")
+             other = MozillaVersion(str(other)[:-3])  # strip ESR from end of string
+         if isinstance(self, LooseModernMozillaVersion) and str(self).endswith("esr"):
+             # If our version ends with esr, coerce through MozillaVersion ending up with
+-            # a StrictVersion if possible
++            # a Version if possible
+             has_esr.add("self")
+             self = MozillaVersion(str(self)[:-3])  # strip ESR from end of string
+         if isinstance(other, LooseModernMozillaVersion) or isinstance(
+@@ -35,8 +83,13 @@ class MozillaVersionCompareMixin:
+                 LooseModernMozillaVersion(str(other)),
+             )
+         else:
+-            # No versions are loose, therefore we can use StrictVersion
+-            val = StrictVersion._cmp(self, other)
++            # No versions are loose, therefore we can use Version
++            def cmp(a, b):
++                a, b = Version(str(a)), Version(str(b))
++                return (a > b) - (a < b)
++
++            val = cmp(self, other)
++
+         if has_esr.isdisjoint(set(["other", "self"])) or has_esr.issuperset(
+             set(["other", "self"])
+         ):
+@@ -51,8 +104,8 @@ class MozillaVersionCompareMixin:
+         return 1  # non esr is greater than esr
+ 
+ 
+-class ModernMozillaVersion(MozillaVersionCompareMixin, StrictVersion):
+-    """A version class that is slightly less restrictive than StrictVersion.
++class ModernMozillaVersion(MozillaVersionCompareMixin, Version):
++    """A version class that is slightly less restrictive than Version.
+     Instead of just allowing "a" or "b" as prerelease tags, it allows any
+     alpha. This allows us to support the once-shipped "3.6.3plugin1" and
+     similar versions."""
+@@ -64,8 +117,8 @@ class ModernMozillaVersion(MozillaVersionCompareMixin, StrictVersion):
+     )
+ 
+ 
+-class AncientMozillaVersion(MozillaVersionCompareMixin, StrictVersion):
+-    """A version class that is slightly less restrictive than StrictVersion.
++class AncientMozillaVersion(MozillaVersionCompareMixin, Version):
++    """A version class that is slightly less restrictive than Version.
+     Instead of just allowing "a" or "b" as prerelease tags, it allows any
+     alpha. This allows us to support the once-shipped "3.6.3plugin1" and
+     similar versions.
+@@ -82,7 +135,7 @@ class AncientMozillaVersion(MozillaVersionCompareMixin, StrictVersion):
+ class LooseModernMozillaVersion(MozillaVersionCompareMixin, LooseVersion):
+     """A version class that is more restrictive than LooseVersion.
+     This class reduces the valid strings to "esr", "a", "b" and "rc" in order
+-    to support esr. StrictVersion requires a trailing number after all strings."""
++    to support esr. Version requires a trailing number after all strings."""
+ 
+     component_re = re.compile(r"(\d+ | a | b | rc | esr | \.)", re.VERBOSE)
+ 
+@@ -93,18 +146,18 @@ class LooseModernMozillaVersion(MozillaVersionCompareMixin, LooseVersion):
+ def MozillaVersion(version):
+     try:
+         return ModernMozillaVersion(version)
+-    except ValueError:
++    except InvalidVersion:
+         pass
+     try:
+         if version.count(".") == 3:
+             return AncientMozillaVersion(version)
+-    except ValueError:
++    except InvalidVersion:
+         pass
+     try:
+         return LooseModernMozillaVersion(version)
+-    except ValueError:
++    except InvalidVersion:
+         pass
+-    raise ValueError("Version number %s is invalid." % version)
++    raise InvalidVersion("Version number %s is invalid." % version)
+ 
+ 
+ def getPrettyVersion(version):
+diff --git a/python/mozrelease/test/test_versions.py b/python/mozrelease/test/test_versions.py
+index f3bca91f1f..eaf7d653db 100644
+--- a/python/mozrelease/test/test_versions.py
++++ b/python/mozrelease/test/test_versions.py
+@@ -1,7 +1,11 @@
+ import mozunit
+ import pytest
+ 
+-from mozrelease.versions import MozillaVersion
++from mozrelease.versions import (
++    AncientMozillaVersion,
++    ModernMozillaVersion,
++    MozillaVersion,
++)
+ 
+ ALL_VERSIONS = [  # Keep this sorted
+     "3.0",
+@@ -91,6 +95,21 @@ def test_versions_compare_greater(comparable_versions):
+     assert MozillaVersion(larger_version) > MozillaVersion(smaller_version)
+ 
+ 
++def test_ModernMozillaVersion():
++    """Test properties specific to ModernMozillaVersion"""
++    assert isinstance(MozillaVersion("1.2.4"), ModernMozillaVersion)
++    assert isinstance(MozillaVersion("1.2.4rc3"), ModernMozillaVersion)
++    assert MozillaVersion("1.2rc3") == MozillaVersion("1.2.0rc3")
++
++
++def test_AncientMozillaVersion():
++    """Test properties specific to AncientMozillaVersion"""
++    assert isinstance(MozillaVersion("1.2.0.4"), AncientMozillaVersion)
++    assert isinstance(MozillaVersion("1.2.0.4pre1"), AncientMozillaVersion)
++    assert MozillaVersion("1.2pre1") == MozillaVersion("1.2.0pre1")
++    assert MozillaVersion("1.2.0.4pre1") == MozillaVersion("1.2.4pre1")
++
++
+ @pytest.mark.parametrize("version", ALL_VERSIONS)
+ def test_versions_compare_equal(version):
+     """Test that versions properly compare as equal through multiple passes."""
+diff --git a/testing/marionette/harness/marionette_harness/marionette_test/testcases.py b/testing/marionette/harness/marionette_harness/marionette_test/testcases.py
+index 32c36967bb..84a6e09665 100644
+--- a/testing/marionette/harness/marionette_harness/marionette_test/testcases.py
++++ b/testing/marionette/harness/marionette_harness/marionette_test/testcases.py
+@@ -2,7 +2,7 @@
+ # License, v. 2.0. If a copy of the MPL was not distributed with this
+ # file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ 
+-import imp
++
+ import os
+ import re
+ import sys
+@@ -14,6 +14,7 @@ from unittest.case import SkipTest
+ 
+ import six
+ from marionette_driver.errors import TimeoutException, UnresponsiveInstanceException
++from mozfile import load_source
+ from mozlog import get_default_logger
+ 
+ 
+@@ -365,21 +366,20 @@ class MarionetteTestCase(CommonTestCase):
+         testvars,
+         **kwargs
+     ):
+-        # since we use imp.load_source to load test modules, if a module
+-        # is loaded with the same name as another one the module would just be
+-        # reloaded.
++        # since load_source caches modules, if a module is loaded with the same
++        # name as another one the module would just be reloaded.
+         #
+-        # We may end up by finding too many test in a module then since
+-        # reload() only update the module dict (so old keys are still there!)
+-        # see https://docs.python.org/2/library/functions.html#reload
++        # We may end up by finding too many test in a module then since reload()
++        # only update the module dict (so old keys are still there!) see
++        # https://docs.python.org/2/library/functions.html#reload
+         #
+-        # we get rid of that by removing the module from sys.modules,
+-        # so we ensure that it will be fully loaded by the
+-        # imp.load_source call.
++        # we get rid of that by removing the module from sys.modules, so we
++        # ensure that it will be fully loaded by the imp.load_source call.
++
+         if mod_name in sys.modules:
+             del sys.modules[mod_name]
+ 
+-        test_mod = imp.load_source(mod_name, filepath)
++        test_mod = load_source(mod_name, filepath)
+ 
+         for name in dir(test_mod):
+             obj = getattr(test_mod, name)
+diff --git a/testing/mochitest/mach_commands.py b/testing/mochitest/mach_commands.py
+index c1f0c0cfa9..74730a98bd 100644
+--- a/testing/mochitest/mach_commands.py
++++ b/testing/mochitest/mach_commands.py
+@@ -14,6 +14,7 @@ import six
+ from mach.decorators import Command, CommandArgument
+ from mozbuild.base import MachCommandConditions as conditions
+ from mozbuild.base import MozbuildObject
++from mozfile import load_source
+ 
+ here = os.path.abspath(os.path.dirname(__file__))
+ 
+@@ -90,11 +91,8 @@ class MochitestRunner(MozbuildObject):
+         """Runs a mochitest."""
+         # runtests.py is ambiguous, so we load the file/module manually.
+         if "mochitest" not in sys.modules:
+-            import imp
+-
+             path = os.path.join(self.mochitest_dir, "runtests.py")
+-            with open(path, "r") as fh:
+-                imp.load_module("mochitest", fh, path, (".py", "r", imp.PY_SOURCE))
++            load_source("mochitest", path)
+ 
+         import mochitest
+ 
+@@ -145,11 +143,9 @@ class MochitestRunner(MozbuildObject):
+         if host_ret != 0:
+             return host_ret
+ 
+-        import imp
+-
+         path = os.path.join(self.mochitest_dir, "runtestsremote.py")
+-        with open(path, "r") as fh:
+-            imp.load_module("runtestsremote", fh, path, (".py", "r", imp.PY_SOURCE))
++        load_source("runtestsremote", path)
++
+         import runtestsremote
+ 
+         options = Namespace(**kwargs)
+@@ -195,14 +191,11 @@ def setup_argument_parser():
+     with warnings.catch_warnings():
+         warnings.simplefilter("ignore")
+ 
+-        import imp
+-
+         path = os.path.join(build_obj.topobjdir, mochitest_dir, "runtests.py")
+         if not os.path.exists(path):
+             path = os.path.join(here, "runtests.py")
+ 
+-        with open(path, "r") as fh:
+-            imp.load_module("mochitest", fh, path, (".py", "r", imp.PY_SOURCE))
++        load_source("mochitest", path)
+ 
+         from mochitest_options import MochitestArgumentParser
+ 
+@@ -237,14 +230,11 @@ def setup_junit_argument_parser():
+         warnings.simplefilter("ignore")
+ 
+         # runtests.py contains MochitestDesktop, required by runjunit
+-        import imp
+-
+         path = os.path.join(build_obj.topobjdir, mochitest_dir, "runtests.py")
+         if not os.path.exists(path):
+             path = os.path.join(here, "runtests.py")
+ 
+-        with open(path, "r") as fh:
+-            imp.load_module("mochitest", fh, path, (".py", "r", imp.PY_SOURCE))
++        load_source("mochitest", path)
+ 
+         import runjunit
+         from mozrunner.devices.android_device import (
+diff --git a/testing/mozbase/mozfile/mozfile/mozfile.py b/testing/mozbase/mozfile/mozfile/mozfile.py
+index 1f4ffa74af..20d56fe4b2 100644
+--- a/testing/mozbase/mozfile/mozfile/mozfile.py
++++ b/testing/mozbase/mozfile/mozfile/mozfile.py
+@@ -22,6 +22,7 @@ __all__ = [
+     "extract",
+     "is_url",
+     "load",
++    "load_source",
+     "copy_contents",
+     "match",
+     "move",
+@@ -629,6 +630,19 @@ def load(resource):
+     return urllib.request.urlopen(resource)
+ 
+ 
++# see https://docs.python.org/3/whatsnew/3.12.html#imp
++def load_source(modname, filename):
++    import importlib.machinery
++    import importlib.util
++
++    loader = importlib.machinery.SourceFileLoader(modname, filename)
++    spec = importlib.util.spec_from_file_location(modname, filename, loader=loader)
++    module = importlib.util.module_from_spec(spec)
++    sys.modules[module.__name__] = module
++    loader.exec_module(module)
++    return module
++
++
+ # We can't depend on mozpack.path here, so copy the 'match' function over.
+ 
+ re_cache = {}
+diff --git a/testing/mozbase/mozprofile/mozprofile/prefs.py b/testing/mozbase/mozprofile/mozprofile/prefs.py
+index 6c3b1173c8..b84d531f23 100644
+--- a/testing/mozbase/mozprofile/mozprofile/prefs.py
++++ b/testing/mozbase/mozprofile/mozprofile/prefs.py
+@@ -12,7 +12,15 @@ import tokenize
+ import mozfile
+ import six
+ from six import StringIO, string_types
+-from six.moves.configparser import SafeConfigParser as ConfigParser
++
++try:
++    from six.moves.configparser import SafeConfigParser as ConfigParser
++except ImportError:  # SafeConfigParser was removed in 3.12
++    from configparser import ConfigParser
++try:
++    ConfigParser.read_file
++except AttributeError:  # read_file was added in 3.2, readfp removed in 3.12
++    ConfigParser.read_file = ConfigParser.readfp
+ 
+ if six.PY3:
+ 
+@@ -24,7 +32,7 @@ __all__ = ("PreferencesReadError", "Preferences")
+ 
+ 
+ class PreferencesReadError(Exception):
+-    """read error for prefrences files"""
++    """read error for preferences files"""
+ 
+ 
+ class Preferences(object):
+@@ -124,7 +132,7 @@ class Preferences(object):
+ 
+         parser = ConfigParser()
+         parser.optionxform = str
+-        parser.readfp(mozfile.load(path))
++        parser.read_file(mozfile.load(path))
+ 
+         if section:
+             if section not in parser.sections():
+diff --git a/testing/mozharness/scripts/desktop_unittest.py b/testing/mozharness/scripts/desktop_unittest.py
+index 336f2c752b..b2bf44c2b2 100755
+--- a/testing/mozharness/scripts/desktop_unittest.py
++++ b/testing/mozharness/scripts/desktop_unittest.py
+@@ -12,7 +12,6 @@ author: Jordan Lund
+ 
+ import copy
+ import glob
+-import imp
+ import json
+ import multiprocessing
+ import os
+@@ -25,6 +24,7 @@ from datetime import datetime, timedelta
+ here = os.path.abspath(os.path.dirname(__file__))
+ sys.path.insert(1, os.path.dirname(here))
+ 
++from mozfile import load_source
+ from mozharness.base.errors import BaseErrorList
+ from mozharness.base.log import INFO, WARNING
+ from mozharness.base.script import PreScriptAction
+@@ -1167,7 +1167,7 @@ class DesktopUnittest(TestingMixin, MercurialScript, MozbaseMixin, CodeCoverageM
+                 )
+ 
+                 if suite_category == "reftest":
+-                    ref_formatter = imp.load_source(
++                    ref_formatter = load_source(
+                         "ReftestFormatter",
+                         os.path.abspath(
+                             os.path.join(dirs["abs_reftest_dir"], "output.py")
+diff --git a/testing/raptor/mach_commands.py b/testing/raptor/mach_commands.py
+index bb9e6b73f5..c076bbbf79 100644
+--- a/testing/raptor/mach_commands.py
++++ b/testing/raptor/mach_commands.py
+@@ -269,10 +269,10 @@ class RaptorRunner(MozbuildObject):
+ def setup_node(command_context):
+     """Fetch the latest node-16 binary and install it into the .mozbuild directory."""
+     import platform
+-    from distutils.version import StrictVersion
+ 
+     from mozbuild.artifact_commands import artifact_toolchain
+     from mozbuild.nodeutil import find_node_executable
++    from packaging.version import Version
+ 
+     print("Setting up node for browsertime...")
+     state_dir = get_state_dir()
+@@ -280,7 +280,7 @@ def setup_node(command_context):
+ 
+     def __check_for_node():
+         # Check standard locations first
+-        node_exe = find_node_executable(min_version=StrictVersion("16.0.0"))
++        node_exe = find_node_executable(min_version=Version("16.0.0"))
+         if node_exe and (node_exe[0] is not None):
+             return node_exe[0]
+         if not os.path.exists(cache_path):
+diff --git a/testing/web-platform/manifestupdate.py b/testing/web-platform/manifestupdate.py
+index 79b7f1ae56..f8f9d08cb9 100644
+--- a/testing/web-platform/manifestupdate.py
++++ b/testing/web-platform/manifestupdate.py
+@@ -5,13 +5,13 @@
+ import argparse
+ import errno
+ import hashlib
+-import imp
+ import os
+ import sys
+ 
+ import manifestdownload
+ import six
+ from mach.util import get_state_dir
++from mozfile import load_source
+ from mozlog.structured import commandline
+ from six.moves import configparser
+ from wptrunner import wptcommandline
+@@ -21,9 +21,7 @@ manifest = None
+ 
+ def do_delayed_imports(wpt_dir):
+     global manifest
+-    imp.load_source(
+-        "localpaths", os.path.join(wpt_dir, "tests", "tools", "localpaths.py")
+-    )
++    load_source("localpaths", os.path.join(wpt_dir, "tests", "tools", "localpaths.py"))
+     sys.path.insert(0, os.path.join(wpt_dir, "tools", "manifest"))
+     import manifest
+ 
+diff --git a/testing/web-platform/tests/service-workers/service-worker/resources/scope1/redirect.py b/testing/web-platform/tests/service-workers/service-worker/resources/scope1/redirect.py
+index bb4c874aac..025ea671c5 100644
+--- a/testing/web-platform/tests/service-workers/service-worker/resources/scope1/redirect.py
++++ b/testing/web-platform/tests/service-workers/service-worker/resources/scope1/redirect.py
+@@ -1,6 +1,8 @@
+ import os
+-import imp
++
++from tools.wpt.utils import load_source
++
+ # Use the file from the parent directory.
+-mod = imp.load_source("_parent", os.path.join(os.path.dirname(os.path.dirname(__file__)),
++mod = load_source("_parent", os.path.join(os.path.dirname(os.path.dirname(__file__)),
+                                               os.path.basename(__file__)))
+ main = mod.main
+diff --git a/testing/web-platform/tests/service-workers/service-worker/resources/scope2/worker_interception_redirect_webworker.py b/testing/web-platform/tests/service-workers/service-worker/resources/scope2/worker_interception_redirect_webworker.py
+index bb4c874aac..025ea671c5 100644
+--- a/testing/web-platform/tests/service-workers/service-worker/resources/scope2/worker_interception_redirect_webworker.py
++++ b/testing/web-platform/tests/service-workers/service-worker/resources/scope2/worker_interception_redirect_webworker.py
+@@ -1,6 +1,8 @@
+ import os
+-import imp
++
++from tools.wpt.utils import load_source
++
+ # Use the file from the parent directory.
+-mod = imp.load_source("_parent", os.path.join(os.path.dirname(os.path.dirname(__file__)),
++mod = load_source("_parent", os.path.join(os.path.dirname(os.path.dirname(__file__)),
+                                               os.path.basename(__file__)))
+ main = mod.main
+diff --git a/testing/web-platform/tests/service-workers/service-worker/resources/subdir/worker_interception_redirect_webworker.py b/testing/web-platform/tests/service-workers/service-worker/resources/subdir/worker_interception_redirect_webworker.py
+index bb4c874aac..025ea671c5 100644
+--- a/testing/web-platform/tests/service-workers/service-worker/resources/subdir/worker_interception_redirect_webworker.py
++++ b/testing/web-platform/tests/service-workers/service-worker/resources/subdir/worker_interception_redirect_webworker.py
+@@ -1,6 +1,8 @@
+ import os
+-import imp
++
++from tools.wpt.utils import load_source
++
+ # Use the file from the parent directory.
+-mod = imp.load_source("_parent", os.path.join(os.path.dirname(os.path.dirname(__file__)),
++mod = load_source("_parent", os.path.join(os.path.dirname(os.path.dirname(__file__)),
+                                               os.path.basename(__file__)))
+ main = mod.main
+diff --git a/testing/web-platform/tests/tools/runner/update_manifest.py b/testing/web-platform/tests/tools/runner/update_manifest.py
+index a7f72b35b3..58b9ac4d84 100644
+--- a/testing/web-platform/tests/tools/runner/update_manifest.py
++++ b/testing/web-platform/tests/tools/runner/update_manifest.py
+@@ -1,16 +1,18 @@
+ # mypy: ignore-errors
+ 
+-import imp
+ import json
+ import os
+ 
++from tools.wpt.utils import load_source
++
+ here = os.path.dirname(__file__)
+-localpaths = imp.load_source("localpaths", os.path.abspath(os.path.join(here, os.pardir, "localpaths.py")))
++localpaths = load_source("localpaths", os.path.abspath(os.path.join(here, os.pardir, "localpaths.py")))
+ 
+ root = localpaths.repo_root
+ 
+ from manifest import manifest
+ 
++
+ def main(request, response):
+     path = os.path.join(root, "MANIFEST.json")
+ 
+diff --git a/testing/web-platform/tests/tools/wpt/utils.py b/testing/web-platform/tests/tools/wpt/utils.py
+index b015b95e1a..5899dc3f3a 100644
+--- a/testing/web-platform/tests/tools/wpt/utils.py
++++ b/testing/web-platform/tests/tools/wpt/utils.py
+@@ -3,10 +3,10 @@
+ import errno
+ import logging
+ import os
+-import sys
+ import shutil
+ import stat
+ import subprocess
++import sys
+ import tarfile
+ import time
+ import zipfile
+@@ -166,3 +166,16 @@ def sha256sum(file_path):
+         for chunk in iter(lambda: f.read(4096), b''):
+             hash.update(chunk)
+     return hash.hexdigest()
++
++
++# see https://docs.python.org/3/whatsnew/3.12.html#imp
++def load_source(modname, filename):
++    import importlib.machinery
++    import importlib.util
++
++    loader = importlib.machinery.SourceFileLoader(modname, filename)
++    spec = importlib.util.spec_from_file_location(modname, filename, loader=loader)
++    module = importlib.util.module_from_spec(spec)
++    sys.modules[module.__name__] = module
++    loader.exec_module(module)
++    return module
+diff --git a/testing/web-platform/tests/tools/wptrunner/wptrunner/stability.py b/testing/web-platform/tests/tools/wptrunner/wptrunner/stability.py
+index 9ac6249c44..029b237f98 100644
+--- a/testing/web-platform/tests/tools/wptrunner/wptrunner/stability.py
++++ b/testing/web-platform/tests/tools/wptrunner/wptrunner/stability.py
+@@ -2,7 +2,6 @@
+ 
+ import copy
+ import functools
+-import imp
+ import io
+ import os
+ from collections import OrderedDict, defaultdict
+@@ -10,16 +9,17 @@ from datetime import datetime
+ 
+ from mozlog import reader
+ from mozlog.formatters import JSONFormatter
+-from mozlog.handlers import BaseHandler, StreamHandler, LogLevelFilter
++from mozlog.handlers import BaseHandler, LogLevelFilter, StreamHandler
++
++from tools.wpt.utils import load_source
+ 
+ from . import wptrunner
+ 
+ here = os.path.dirname(__file__)
+-localpaths = imp.load_source("localpaths", os.path.abspath(os.path.join(here, os.pardir, os.pardir, "localpaths.py")))
++localpaths = load_source("localpaths", os.path.abspath(os.path.join(here, os.pardir, os.pardir, "localpaths.py")))  # type: ignore
+ from ci.tc.github_checks_output import get_gh_checks_outputter  # type: ignore
+ from wpt.markdown import markdown_adjust, table  # type: ignore
+ 
+-
+ # If a test takes more than (FLAKY_THRESHOLD*timeout) and does not consistently
+ # time out, it is considered slow (potentially flaky).
+ FLAKY_THRESHOLD = 0.8
+diff --git a/testing/web-platform/tests/xhr/resources/auth1/auth.py b/testing/web-platform/tests/xhr/resources/auth1/auth.py
+index db4f7bc4c9..3797aaa52e 100644
+--- a/testing/web-platform/tests/xhr/resources/auth1/auth.py
++++ b/testing/web-platform/tests/xhr/resources/auth1/auth.py
+@@ -1,12 +1,13 @@
+-import imp
+ import os
+ 
+ from wptserve.utils import isomorphic_decode
+ 
++from tools.wpt.utils import load_source
++
+ here = os.path.dirname(os.path.abspath(isomorphic_decode(__file__)))
+ 
+ def main(request, response):
+-    auth = imp.load_source(u"", os.path.join(here,
++    auth = load_source(u"", os.path.join(here,
+                                              u"..",
+                                              u"authentication.py"))
+     return auth.main(request, response)
+diff --git a/testing/web-platform/tests/xhr/resources/auth10/auth.py b/testing/web-platform/tests/xhr/resources/auth10/auth.py
+index db4f7bc4c9..568d31e906 100644
+--- a/testing/web-platform/tests/xhr/resources/auth10/auth.py
++++ b/testing/web-platform/tests/xhr/resources/auth10/auth.py
+@@ -1,12 +1,14 @@
+-import imp
+ import os
+ 
+ from wptserve.utils import isomorphic_decode
+ 
++from tools.wpt.utils import load_source
++
+ here = os.path.dirname(os.path.abspath(isomorphic_decode(__file__)))
+ 
++
+ def main(request, response):
+-    auth = imp.load_source(u"", os.path.join(here,
++    auth = load_source(u"", os.path.join(here,
+                                              u"..",
+                                              u"authentication.py"))
+     return auth.main(request, response)
+diff --git a/testing/web-platform/tests/xhr/resources/auth11/auth.py b/testing/web-platform/tests/xhr/resources/auth11/auth.py
+index db4f7bc4c9..3797aaa52e 100644
+--- a/testing/web-platform/tests/xhr/resources/auth11/auth.py
++++ b/testing/web-platform/tests/xhr/resources/auth11/auth.py
+@@ -1,12 +1,13 @@
+-import imp
+ import os
+ 
+ from wptserve.utils import isomorphic_decode
+ 
++from tools.wpt.utils import load_source
++
+ here = os.path.dirname(os.path.abspath(isomorphic_decode(__file__)))
+ 
+ def main(request, response):
+-    auth = imp.load_source(u"", os.path.join(here,
++    auth = load_source(u"", os.path.join(here,
+                                              u"..",
+                                              u"authentication.py"))
+     return auth.main(request, response)
+diff --git a/testing/web-platform/tests/xhr/resources/auth2/auth.py b/testing/web-platform/tests/xhr/resources/auth2/auth.py
+index db4f7bc4c9..568d31e906 100644
+--- a/testing/web-platform/tests/xhr/resources/auth2/auth.py
++++ b/testing/web-platform/tests/xhr/resources/auth2/auth.py
+@@ -1,12 +1,14 @@
+-import imp
+ import os
+ 
+ from wptserve.utils import isomorphic_decode
+ 
++from tools.wpt.utils import load_source
++
+ here = os.path.dirname(os.path.abspath(isomorphic_decode(__file__)))
+ 
++
+ def main(request, response):
+-    auth = imp.load_source(u"", os.path.join(here,
++    auth = load_source(u"", os.path.join(here,
+                                              u"..",
+                                              u"authentication.py"))
+     return auth.main(request, response)
+diff --git a/testing/web-platform/tests/xhr/resources/auth2/corsenabled.py b/testing/web-platform/tests/xhr/resources/auth2/corsenabled.py
+index bec6687dbe..7b9d3b65ab 100644
+--- a/testing/web-platform/tests/xhr/resources/auth2/corsenabled.py
++++ b/testing/web-platform/tests/xhr/resources/auth2/corsenabled.py
+@@ -1,8 +1,9 @@
+-import imp
+ import os
+ 
+ from wptserve.utils import isomorphic_decode
+ 
++from tools.wpt.utils import load_source
++
+ here = os.path.dirname(isomorphic_decode(__file__))
+ 
+ def main(request, response):
+@@ -11,7 +12,7 @@ def main(request, response):
+     response.headers.set(b'Access-Control-Allow-Methods', b'GET')
+     response.headers.set(b'Access-Control-Allow-Headers', b'authorization, x-user, x-pass')
+     response.headers.set(b'Access-Control-Expose-Headers', b'x-challenge, xhr-user, ses-user')
+-    auth = imp.load_source(u"", os.path.abspath(os.path.join(here, os.pardir, u"authentication.py")))
++    auth = load_source(u"", os.path.abspath(os.path.join(here, os.pardir, u"authentication.py")))
+     if request.method == u"OPTIONS":
+         return b""
+     else:
+diff --git a/testing/web-platform/tests/xhr/resources/auth3/auth.py b/testing/web-platform/tests/xhr/resources/auth3/auth.py
+index db4f7bc4c9..3797aaa52e 100644
+--- a/testing/web-platform/tests/xhr/resources/auth3/auth.py
++++ b/testing/web-platform/tests/xhr/resources/auth3/auth.py
+@@ -1,12 +1,13 @@
+-import imp
+ import os
+ 
+ from wptserve.utils import isomorphic_decode
+ 
++from tools.wpt.utils import load_source
++
+ here = os.path.dirname(os.path.abspath(isomorphic_decode(__file__)))
+ 
+ def main(request, response):
+-    auth = imp.load_source(u"", os.path.join(here,
++    auth = load_source(u"", os.path.join(here,
+                                              u"..",
+                                              u"authentication.py"))
+     return auth.main(request, response)
+diff --git a/testing/web-platform/tests/xhr/resources/auth4/auth.py b/testing/web-platform/tests/xhr/resources/auth4/auth.py
+index db4f7bc4c9..3797aaa52e 100644
+--- a/testing/web-platform/tests/xhr/resources/auth4/auth.py
++++ b/testing/web-platform/tests/xhr/resources/auth4/auth.py
+@@ -1,12 +1,13 @@
+-import imp
+ import os
+ 
+ from wptserve.utils import isomorphic_decode
+ 
++from tools.wpt.utils import load_source
++
+ here = os.path.dirname(os.path.abspath(isomorphic_decode(__file__)))
+ 
+ def main(request, response):
+-    auth = imp.load_source(u"", os.path.join(here,
++    auth = load_source(u"", os.path.join(here,
+                                              u"..",
+                                              u"authentication.py"))
+     return auth.main(request, response)
+diff --git a/testing/web-platform/tests/xhr/resources/auth7/corsenabled.py b/testing/web-platform/tests/xhr/resources/auth7/corsenabled.py
+index 7a060627b7..c82ba4e6bc 100644
+--- a/testing/web-platform/tests/xhr/resources/auth7/corsenabled.py
++++ b/testing/web-platform/tests/xhr/resources/auth7/corsenabled.py
+@@ -1,8 +1,9 @@
+-import imp
+ import os
+ 
+ from wptserve.utils import isomorphic_decode
+ 
++from tools.wpt.utils import load_source
++
+ here = os.path.dirname(isomorphic_decode(__file__))
+ 
+ def main(request, response):
+@@ -11,7 +12,7 @@ def main(request, response):
+     response.headers.set(b'Access-Control-Allow-Methods', b'GET')
+     response.headers.set(b'Access-Control-Allow-Headers', b'authorization, x-user, x-pass')
+     response.headers.set(b'Access-Control-Expose-Headers', b'x-challenge, xhr-user, ses-user')
+-    auth = imp.load_source(u"", os.path.join(here,
++    auth = load_source(u"", os.path.join(here,
+                                              os.pardir,
+                                              u"authentication.py"))
+     if request.method == u"OPTIONS":
+diff --git a/testing/web-platform/tests/xhr/resources/auth8/corsenabled-no-authorize.py b/testing/web-platform/tests/xhr/resources/auth8/corsenabled-no-authorize.py
+index af8e7c4c17..4fdf99e265 100644
+--- a/testing/web-platform/tests/xhr/resources/auth8/corsenabled-no-authorize.py
++++ b/testing/web-platform/tests/xhr/resources/auth8/corsenabled-no-authorize.py
+@@ -1,8 +1,9 @@
+-import imp
+ import os
+ 
+ from wptserve.utils import isomorphic_decode
+ 
++from tools.wpt.utils import load_source
++
+ here = os.path.dirname(isomorphic_decode(__file__))
+ 
+ def main(request, response):
+@@ -11,7 +12,7 @@ def main(request, response):
+     response.headers.set(b'Access-Control-Allow-Methods', b'GET')
+     response.headers.set(b'Access-Control-Allow-Headers', b'x-user, x-pass')
+     response.headers.set(b'Access-Control-Expose-Headers', b'x-challenge, xhr-user, ses-user')
+-    auth = imp.load_source(u"", os.path.join(here,
++    auth = load_source(u"", os.path.join(here,
+                                              os.pardir,
+                                              u"authentication.py"))
+     if request.method == u"OPTIONS":
+diff --git a/testing/web-platform/tests/xhr/resources/auth9/auth.py b/testing/web-platform/tests/xhr/resources/auth9/auth.py
+index db4f7bc4c9..3797aaa52e 100644
+--- a/testing/web-platform/tests/xhr/resources/auth9/auth.py
++++ b/testing/web-platform/tests/xhr/resources/auth9/auth.py
+@@ -1,12 +1,13 @@
+-import imp
+ import os
+ 
+ from wptserve.utils import isomorphic_decode
+ 
++from tools.wpt.utils import load_source
++
+ here = os.path.dirname(os.path.abspath(isomorphic_decode(__file__)))
+ 
+ def main(request, response):
+-    auth = imp.load_source(u"", os.path.join(here,
++    auth = load_source(u"", os.path.join(here,
+                                              u"..",
+                                              u"authentication.py"))
+     return auth.main(request, response)
+diff --git a/testing/web-platform/update/__init__.py b/testing/web-platform/update/__init__.py
+index 47c6d36d95..66bb6f2ab6 100644
+--- a/testing/web-platform/update/__init__.py
++++ b/testing/web-platform/update/__init__.py
+@@ -4,15 +4,15 @@
+ # License, v. 2.0. If a copy of the MPL was not distributed with this
+ # file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ 
+-import imp
+ import os
+ import sys
+ 
++from mozfile import load_source
+ from mozlog import structuredlog
+ 
+ here = os.path.split(__file__)[0]
+ 
+-imp.load_source(
++load_source(
+     "localpaths", os.path.join(here, os.pardir, "tests", "tools", "localpaths.py")
+ )
+ 
+diff --git a/third_party/python/pip/pip/_vendor/pkg_resources/__init__.py b/third_party/python/pip/pip/_vendor/pkg_resources/__init__.py
+index 4cd562cf94..9f5b9e7074 100644
+--- a/third_party/python/pip/pip/_vendor/pkg_resources/__init__.py
++++ b/third_party/python/pip/pip/_vendor/pkg_resources/__init__.py
+@@ -2161,7 +2161,8 @@ def resolve_egg_link(path):
+     return next(dist_groups, ())
+ 
+ 
+-register_finder(pkgutil.ImpImporter, find_on_path)
++if hasattr(pkgutil, 'ImpImporter'):
++    register_finder(pkgutil.ImpImporter, find_on_path)
+ 
+ if hasattr(importlib_machinery, 'FileFinder'):
+     register_finder(importlib_machinery.FileFinder, find_on_path)
+@@ -2312,7 +2313,8 @@ def file_ns_handler(importer, path_item, packageName, module):
+         return subpath
+ 
+ 
+-register_namespace_handler(pkgutil.ImpImporter, file_ns_handler)
++if hasattr(pkgutil, 'ImpImporter'):
++    register_namespace_handler(pkgutil.ImpImporter, file_ns_handler)
+ register_namespace_handler(zipimport.zipimporter, file_ns_handler)
+ 
+ if hasattr(importlib_machinery, 'FileFinder'):
+diff --git a/third_party/python/poetry.lock b/third_party/python/poetry.lock
+index c4d90d056e..a5fef481bd 100644
+--- a/third_party/python/poetry.lock
++++ b/third_party/python/poetry.lock
+@@ -1003,14 +1003,14 @@ testing = ["flake8-2020", "jaraco.envs", "jaraco.test (>=3.2.0)", "mock", "paver
+ 
+ [[package]]
+ name = "six"
+-version = "1.13.0"
++version = "1.16.0"
+ description = "Python 2 and 3 compatibility utilities"
+ category = "main"
+ optional = false
+-python-versions = ">=2.6, !=3.0.*, !=3.1.*"
++python-versions = ">=2.7, !=3.0.*, !=3.1.*, !=3.2.*"
+ files = [
+-    {file = "six-1.13.0-py2.py3-none-any.whl", hash = "sha256:1f1b7d42e254082a9db6279deae68afb421ceba6158efa6131de7b3003ee93fd"},
+-    {file = "six-1.13.0.tar.gz", hash = "sha256:30f610279e8b2578cab6db20741130331735c781b56053c59c4076da27f06b66"},
++    {file = "six-1.16.0-py2.py3-none-any.whl", hash = "sha256:8abb2f1d86890a2dfb989f9a77cfcfd3e47c2a354b01111771326f8aa26e0254"},
++    {file = "six-1.16.0.tar.gz", hash = "sha256:1e61c37477a1626458e36f7b1d82aa5c9b094fa4802892072e49de9c60c4c926"},
+ ]
+ 
+ [[package]]
+@@ -1138,19 +1138,19 @@ files = [
+ 
+ [[package]]
+ name = "urllib3"
+-version = "1.26.0"
++version = "1.26.17"
+ description = "HTTP library with thread-safe connection pooling, file post, and more."
+ category = "main"
+ optional = false
+-python-versions = ">=2.7, !=3.0.*, !=3.1.*, !=3.2.*, !=3.3.*, !=3.4.*, <4"
++python-versions = ">=2.7, !=3.0.*, !=3.1.*, !=3.2.*, !=3.3.*, !=3.4.*, !=3.5.*"
+ files = [
+-    {file = "urllib3-1.26.0-py2.py3-none-any.whl", hash = "sha256:bad31cb622ceee0ab46c4c884cf61957def0ff2e644de0a7a093678844c9ccac"},
+-    {file = "urllib3-1.26.0.tar.gz", hash = "sha256:4849f132941d68144df0a3785ccc4fe423430ba5db0108d045c8cadbc90f517a"},
++    {file = "urllib3-1.26.17-py2.py3-none-any.whl", hash = "sha256:94a757d178c9be92ef5539b8840d48dc9cf1b2709c9d6b588232a055c524458b"},
++    {file = "urllib3-1.26.17.tar.gz", hash = "sha256:24d6a242c28d29af46c3fae832c36db3bbebcc533dd1bb549172cd739c82df21"},
+ ]
+ 
+ [package.extras]
+-brotli = ["brotlipy (>=0.6.0)"]
+-secure = ["certifi", "cryptography (>=1.3.4)", "idna (>=2.0.0)", "ipaddress", "pyOpenSSL (>=0.14)"]
++brotli = ["brotli (==1.0.9)", "brotli (>=1.0.9)", "brotlicffi (>=0.8.0)", "brotlipy (>=0.6.0)"]
++secure = ["certifi", "cryptography (>=1.3.4)", "idna (>=2.0.0)", "ipaddress", "pyOpenSSL (>=0.14)", "urllib3-secure-extra"]
+ socks = ["PySocks (>=1.5.6,!=1.5.7,<2.0)"]
+ 
+ [[package]]
+@@ -1279,4 +1279,4 @@ testing = ["func-timeout", "jaraco.itertools", "pytest (>=4.6)", "pytest-black (
+ [metadata]
+ lock-version = "2.0"
+ python-versions = "^3.7"
+-content-hash = "73400b896922dda273e939258f76bbb8d752ec811ce33fd56ec735516b932c2b"
++content-hash = "362f79e0ac281ba4f9175ed68dc2925aac1403215ffe4ef462f35e8ded19fc05"
+diff --git a/third_party/python/requirements.in b/third_party/python/requirements.in
+index 1268f553ff..a051dbcaa4 100644
+--- a/third_party/python/requirements.in
++++ b/third_party/python/requirements.in
+@@ -39,14 +39,14 @@ responses==0.10.6
+ rsa==3.1.4
+ sentry-sdk==0.14.3
+ setuptools==51.2.0
+-six==1.13.0
++six==1.16.0
+ slugid==2.0.0
+ taskcluster==44.2.2
+ taskcluster-taskgraph==3.5.2
+ taskcluster-urls==13.0.1
+ toml==0.10.2
+ tqdm==4.62.3
+-urllib3==1.26
++urllib3==1.26.17
+ voluptuous==0.12.1
+ wheel==0.37.0
+ yamllint==1.23
+diff --git a/third_party/python/requirements.txt b/third_party/python/requirements.txt
+index 6460b258c0..113eff0165 100644
+--- a/third_party/python/requirements.txt
++++ b/third_party/python/requirements.txt
+@@ -322,9 +322,9 @@ sentry-sdk==0.14.3 ; python_version >= "3.7" and python_version < "4.0" \
+ setuptools==51.2.0 ; python_version >= "3.7" and python_version < "4.0" \
+     --hash=sha256:56948bf25c682e166cf2bfe7c1ad63e5745849b50d1ae7b0f8bff5decdcf34f2 \
+     --hash=sha256:7ef59b1790b3491f8d321f531eccc11517a07a4d7637e498465cd834d80d4c2c
+-six==1.13.0 ; python_version >= "3.7" and python_version < "4.0" \
+-    --hash=sha256:1f1b7d42e254082a9db6279deae68afb421ceba6158efa6131de7b3003ee93fd \
+-    --hash=sha256:30f610279e8b2578cab6db20741130331735c781b56053c59c4076da27f06b66
++six==1.16.0 ; python_version >= "3.7" and python_version < "4.0" \
++    --hash=sha256:1e61c37477a1626458e36f7b1d82aa5c9b094fa4802892072e49de9c60c4c926 \
++    --hash=sha256:8abb2f1d86890a2dfb989f9a77cfcfd3e47c2a354b01111771326f8aa26e0254
+ slugid==2.0.0 ; python_version >= "3.7" and python_version < "4.0" \
+     --hash=sha256:a950d98b72691178bdd4d6c52743c4a2aa039207cf7a97d71060a111ff9ba297 \
+     --hash=sha256:aec8b0e01c4ad32e38e12d609eab3ec912fd129aaf6b2ded0199b56a5f8fd67c
+@@ -349,9 +349,9 @@ typing-extensions==3.10.0.0 ; python_version >= "3.7" and python_version < "4.0"
+     --hash=sha256:0ac0f89795dd19de6b97debb0c6af1c70987fd80a2d62d1958f7e56fcc31b497 \
+     --hash=sha256:50b6f157849174217d0656f99dc82fe932884fb250826c18350e159ec6cdf342 \
+     --hash=sha256:779383f6086d90c99ae41cf0ff39aac8a7937a9283ce0a414e5dd782f4c94a84
+-urllib3==1.26.0 ; python_version >= "3.7" and python_version < "4" \
+-    --hash=sha256:4849f132941d68144df0a3785ccc4fe423430ba5db0108d045c8cadbc90f517a \
+-    --hash=sha256:bad31cb622ceee0ab46c4c884cf61957def0ff2e644de0a7a093678844c9ccac
++urllib3==1.26.17 ; python_version >= "3.7" and python_version < "4.0" \
++    --hash=sha256:24d6a242c28d29af46c3fae832c36db3bbebcc533dd1bb549172cd739c82df21 \
++    --hash=sha256:94a757d178c9be92ef5539b8840d48dc9cf1b2709c9d6b588232a055c524458b
+ voluptuous==0.12.1 ; python_version >= "3.7" and python_version < "4.0" \
+     --hash=sha256:663572419281ddfaf4b4197fd4942d181630120fb39b333e3adad70aeb56444b \
+     --hash=sha256:8ace33fcf9e6b1f59406bfaf6b8ec7bcc44266a9f29080b4deb4fe6ff2492386
+diff --git a/third_party/python/six/six-1.13.0.dist-info/RECORD b/third_party/python/six/six-1.13.0.dist-info/RECORD
+deleted file mode 100644
+index a0e6c1fd4b..0000000000
+--- a/third_party/python/six/six-1.13.0.dist-info/RECORD
++++ /dev/null
+@@ -1,6 +0,0 @@
+-six.py,sha256=bsEzSFTZTx49wQttLORmSZTrpjGc8UbXt-HBa_LZX7Q,33045
+-six-1.13.0.dist-info/LICENSE,sha256=t1KbjAcXGniow2wyg5BVKOSBKUXZd9El65JujMvyRbY,1066
+-six-1.13.0.dist-info/METADATA,sha256=hxS4rSPRfO8ewbcLS30anoFi6LFgUQ3mk_xknZ8RV4w,1940
+-six-1.13.0.dist-info/WHEEL,sha256=8zNYZbwQSXoB9IfXOjPfeNwvAsALAjffgk27FqvCWbo,110
+-six-1.13.0.dist-info/top_level.txt,sha256=_iVH_iYEtEXnD8nYGQYpYFUvkUW9sEO1GYbkeKSAais,4
+-six-1.13.0.dist-info/RECORD,,
+diff --git a/third_party/python/six/six-1.13.0.dist-info/LICENSE b/third_party/python/six/six-1.16.0.dist-info/LICENSE
+similarity index 96%
+rename from third_party/python/six/six-1.13.0.dist-info/LICENSE
+rename to third_party/python/six/six-1.16.0.dist-info/LICENSE
+index 4b05a54526..de6633112c 100644
+--- a/third_party/python/six/six-1.13.0.dist-info/LICENSE
++++ b/third_party/python/six/six-1.16.0.dist-info/LICENSE
+@@ -1,4 +1,4 @@
+-Copyright (c) 2010-2019 Benjamin Peterson
++Copyright (c) 2010-2020 Benjamin Peterson
+ 
+ Permission is hereby granted, free of charge, to any person obtaining a copy of
+ this software and associated documentation files (the "Software"), to deal in
+diff --git a/third_party/python/six/six-1.13.0.dist-info/METADATA b/third_party/python/six/six-1.16.0.dist-info/METADATA
+similarity index 85%
+rename from third_party/python/six/six-1.13.0.dist-info/METADATA
+rename to third_party/python/six/six-1.16.0.dist-info/METADATA
+index b0c8f51e1f..6d7525c2eb 100644
+--- a/third_party/python/six/six-1.13.0.dist-info/METADATA
++++ b/third_party/python/six/six-1.16.0.dist-info/METADATA
+@@ -1,6 +1,6 @@
+ Metadata-Version: 2.1
+ Name: six
+-Version: 1.13.0
++Version: 1.16.0
+ Summary: Python 2 and 3 compatibility utilities
+ Home-page: https://github.com/benjaminp/six
+ Author: Benjamin Peterson
+@@ -14,7 +14,7 @@ Classifier: Intended Audience :: Developers
+ Classifier: License :: OSI Approved :: MIT License
+ Classifier: Topic :: Software Development :: Libraries
+ Classifier: Topic :: Utilities
+-Requires-Python: >=2.6, !=3.0.*, !=3.1.*
++Requires-Python: >=2.7, !=3.0.*, !=3.1.*, !=3.2.*
+ 
+ .. image:: https://img.shields.io/pypi/v/six.svg
+    :target: https://pypi.org/project/six/
+@@ -37,7 +37,7 @@ for smoothing over the differences between the Python versions with the goal of
+ writing Python code that is compatible on both Python versions.  See the
+ documentation for more information on what is provided.
+ 
+-Six supports every Python version since 2.6.  It is contained in only one Python
++Six supports Python 2.7 and 3.3+.  It is contained in only one Python
+ file, so it can be easily copied into your project. (The copyright and license
+ notice must be retained.)
+ 
+@@ -46,7 +46,4 @@ Online documentation is at https://six.readthedocs.io/.
+ Bugs can be reported to https://github.com/benjaminp/six.  The code can also
+ be found there.
+ 
+-For questions about six or porting in general, email the python-porting mailing
+-list: https://mail.python.org/mailman/listinfo/python-porting
+-
+ 
+diff --git a/third_party/python/six/six-1.16.0.dist-info/RECORD b/third_party/python/six/six-1.16.0.dist-info/RECORD
+new file mode 100644
+index 0000000000..8de4af79fa
+--- /dev/null
++++ b/third_party/python/six/six-1.16.0.dist-info/RECORD
+@@ -0,0 +1,6 @@
++six.py,sha256=TOOfQi7nFGfMrIvtdr6wX4wyHH8M7aknmuLfo2cBBrM,34549
++six-1.16.0.dist-info/LICENSE,sha256=i7hQxWWqOJ_cFvOkaWWtI9gq3_YPI5P8J2K2MYXo5sk,1066
++six-1.16.0.dist-info/METADATA,sha256=VQcGIFCAEmfZcl77E5riPCN4v2TIsc_qtacnjxKHJoI,1795
++six-1.16.0.dist-info/WHEEL,sha256=Z-nyYpwrcSqxfdux5Mbn_DQ525iP7J2DG3JgGvOYyTQ,110
++six-1.16.0.dist-info/top_level.txt,sha256=_iVH_iYEtEXnD8nYGQYpYFUvkUW9sEO1GYbkeKSAais,4
++six-1.16.0.dist-info/RECORD,,
+diff --git a/third_party/python/urllib3/urllib3-1.26.0.dist-info/WHEEL b/third_party/python/six/six-1.16.0.dist-info/WHEEL
+similarity index 70%
+rename from third_party/python/urllib3/urllib3-1.26.0.dist-info/WHEEL
+rename to third_party/python/six/six-1.16.0.dist-info/WHEEL
+index 6d38aa0601..01b8fc7d4a 100644
+--- a/third_party/python/urllib3/urllib3-1.26.0.dist-info/WHEEL
++++ b/third_party/python/six/six-1.16.0.dist-info/WHEEL
+@@ -1,5 +1,5 @@
+ Wheel-Version: 1.0
+-Generator: bdist_wheel (0.35.1)
++Generator: bdist_wheel (0.36.2)
+ Root-Is-Purelib: true
+ Tag: py2-none-any
+ Tag: py3-none-any
+diff --git a/third_party/python/six/six-1.13.0.dist-info/top_level.txt b/third_party/python/six/six-1.16.0.dist-info/top_level.txt
+similarity index 100%
+rename from third_party/python/six/six-1.13.0.dist-info/top_level.txt
+rename to third_party/python/six/six-1.16.0.dist-info/top_level.txt
+diff --git a/third_party/python/six/six.py b/third_party/python/six/six.py
+index 357e624abc..4e15675d8b 100644
+--- a/third_party/python/six/six.py
++++ b/third_party/python/six/six.py
+@@ -1,4 +1,4 @@
+-# Copyright (c) 2010-2019 Benjamin Peterson
++# Copyright (c) 2010-2020 Benjamin Peterson
+ #
+ # Permission is hereby granted, free of charge, to any person obtaining a copy
+ # of this software and associated documentation files (the "Software"), to deal
+@@ -29,7 +29,7 @@ import sys
+ import types
+ 
+ __author__ = "Benjamin Peterson <benjamin@python.org>"
+-__version__ = "1.13.0"
++__version__ = "1.16.0"
+ 
+ 
+ # Useful for very coarse version differentiation.
+@@ -71,6 +71,11 @@ else:
+             MAXSIZE = int((1 << 63) - 1)
+         del X
+ 
++if PY34:
++    from importlib.util import spec_from_loader
++else:
++    spec_from_loader = None
++
+ 
+ def _add_doc(func, doc):
+     """Add documentation to a function."""
+@@ -186,6 +191,11 @@ class _SixMetaPathImporter(object):
+             return self
+         return None
+ 
++    def find_spec(self, fullname, path, target=None):
++        if fullname in self.known_modules:
++            return spec_from_loader(fullname, self)
++        return None
++
+     def __get_module(self, fullname):
+         try:
+             return self.known_modules[fullname]
+@@ -223,6 +233,12 @@ class _SixMetaPathImporter(object):
+         return None
+     get_source = get_code  # same as get_code
+ 
++    def create_module(self, spec):
++        return self.load_module(spec.name)
++
++    def exec_module(self, module):
++        pass
++
+ _importer = _SixMetaPathImporter(__name__)
+ 
+ 
+@@ -259,7 +275,7 @@ _moved_attributes = [
+     MovedModule("copyreg", "copy_reg"),
+     MovedModule("dbm_gnu", "gdbm", "dbm.gnu"),
+     MovedModule("dbm_ndbm", "dbm", "dbm.ndbm"),
+-    MovedModule("_dummy_thread", "dummy_thread", "_dummy_thread"),
++    MovedModule("_dummy_thread", "dummy_thread", "_dummy_thread" if sys.version_info < (3, 9) else "_thread"),
+     MovedModule("http_cookiejar", "cookielib", "http.cookiejar"),
+     MovedModule("http_cookies", "Cookie", "http.cookies"),
+     MovedModule("html_entities", "htmlentitydefs", "html.entities"),
+@@ -644,9 +660,11 @@ if PY3:
+     if sys.version_info[1] <= 1:
+         _assertRaisesRegex = "assertRaisesRegexp"
+         _assertRegex = "assertRegexpMatches"
++        _assertNotRegex = "assertNotRegexpMatches"
+     else:
+         _assertRaisesRegex = "assertRaisesRegex"
+         _assertRegex = "assertRegex"
++        _assertNotRegex = "assertNotRegex"
+ else:
+     def b(s):
+         return s
+@@ -668,6 +686,7 @@ else:
+     _assertCountEqual = "assertItemsEqual"
+     _assertRaisesRegex = "assertRaisesRegexp"
+     _assertRegex = "assertRegexpMatches"
++    _assertNotRegex = "assertNotRegexpMatches"
+ _add_doc(b, """Byte literal""")
+ _add_doc(u, """Text literal""")
+ 
+@@ -684,6 +703,10 @@ def assertRegex(self, *args, **kwargs):
+     return getattr(self, _assertRegex)(*args, **kwargs)
+ 
+ 
++def assertNotRegex(self, *args, **kwargs):
++    return getattr(self, _assertNotRegex)(*args, **kwargs)
++
++
+ if PY3:
+     exec_ = getattr(moves.builtins, "exec")
+ 
+@@ -719,16 +742,7 @@ else:
+ """)
+ 
+ 
+-if sys.version_info[:2] == (3, 2):
+-    exec_("""def raise_from(value, from_value):
+-    try:
+-        if from_value is None:
+-            raise value
+-        raise value from from_value
+-    finally:
+-        value = None
+-""")
+-elif sys.version_info[:2] > (3, 2):
++if sys.version_info[:2] > (3,):
+     exec_("""def raise_from(value, from_value):
+     try:
+         raise value from from_value
+@@ -808,13 +822,33 @@ if sys.version_info[:2] < (3, 3):
+ _add_doc(reraise, """Reraise an exception.""")
+ 
+ if sys.version_info[0:2] < (3, 4):
++    # This does exactly the same what the :func:`py3:functools.update_wrapper`
++    # function does on Python versions after 3.2. It sets the ``__wrapped__``
++    # attribute on ``wrapper`` object and it doesn't raise an error if any of
++    # the attributes mentioned in ``assigned`` and ``updated`` are missing on
++    # ``wrapped`` object.
++    def _update_wrapper(wrapper, wrapped,
++                        assigned=functools.WRAPPER_ASSIGNMENTS,
++                        updated=functools.WRAPPER_UPDATES):
++        for attr in assigned:
++            try:
++                value = getattr(wrapped, attr)
++            except AttributeError:
++                continue
++            else:
++                setattr(wrapper, attr, value)
++        for attr in updated:
++            getattr(wrapper, attr).update(getattr(wrapped, attr, {}))
++        wrapper.__wrapped__ = wrapped
++        return wrapper
++    _update_wrapper.__doc__ = functools.update_wrapper.__doc__
++
+     def wraps(wrapped, assigned=functools.WRAPPER_ASSIGNMENTS,
+               updated=functools.WRAPPER_UPDATES):
+-        def wrapper(f):
+-            f = functools.wraps(wrapped, assigned, updated)(f)
+-            f.__wrapped__ = wrapped
+-            return f
+-        return wrapper
++        return functools.partial(_update_wrapper, wrapped=wrapped,
++                                 assigned=assigned, updated=updated)
++    wraps.__doc__ = functools.wraps.__doc__
++
+ else:
+     wraps = functools.wraps
+ 
+@@ -872,12 +906,11 @@ def ensure_binary(s, encoding='utf-8', errors='strict'):
+       - `str` -> encoded to `bytes`
+       - `bytes` -> `bytes`
+     """
++    if isinstance(s, binary_type):
++        return s
+     if isinstance(s, text_type):
+         return s.encode(encoding, errors)
+-    elif isinstance(s, binary_type):
+-        return s
+-    else:
+-        raise TypeError("not expecting type '%s'" % type(s))
++    raise TypeError("not expecting type '%s'" % type(s))
+ 
+ 
+ def ensure_str(s, encoding='utf-8', errors='strict'):
+@@ -891,12 +924,15 @@ def ensure_str(s, encoding='utf-8', errors='strict'):
+       - `str` -> `str`
+       - `bytes` -> decoded to `str`
+     """
+-    if not isinstance(s, (text_type, binary_type)):
+-        raise TypeError("not expecting type '%s'" % type(s))
++    # Optimization: Fast return for the common case.
++    if type(s) is str:
++        return s
+     if PY2 and isinstance(s, text_type):
+-        s = s.encode(encoding, errors)
++        return s.encode(encoding, errors)
+     elif PY3 and isinstance(s, binary_type):
+-        s = s.decode(encoding, errors)
++        return s.decode(encoding, errors)
++    elif not isinstance(s, (text_type, binary_type)):
++        raise TypeError("not expecting type '%s'" % type(s))
+     return s
+ 
+ 
+@@ -919,10 +955,9 @@ def ensure_text(s, encoding='utf-8', errors='strict'):
+         raise TypeError("not expecting type '%s'" % type(s))
+ 
+ 
+-
+ def python_2_unicode_compatible(klass):
+     """
+-    A decorator that defines __unicode__ and __str__ methods under Python 2.
++    A class decorator that defines __unicode__ and __str__ methods under Python 2.
+     Under Python 3 it does nothing.
+ 
+     To support Python 2 and 3 with a single code base, define a __str__ method
+diff --git a/third_party/python/urllib3/urllib3-1.26.0.dist-info/RECORD b/third_party/python/urllib3/urllib3-1.26.0.dist-info/RECORD
+deleted file mode 100644
+index ec9088a111..0000000000
+--- a/third_party/python/urllib3/urllib3-1.26.0.dist-info/RECORD
++++ /dev/null
+@@ -1,44 +0,0 @@
+-urllib3/__init__.py,sha256=j3yzHIbmW7CS-IKQJ9-PPQf_YKO8EOAey_rMW0UR7us,2763
+-urllib3/_collections.py,sha256=Rp1mVyBgc_UlAcp6M3at1skJBXR5J43NawRTvW2g_XY,10811
+-urllib3/_version.py,sha256=H0vLQ8PY350EPZlZQa8ri0tEjVS-xhGdQOHcU360-0A,63
+-urllib3/connection.py,sha256=BdaUSNpGzO0zq28i9MhOXb6QZspeVdVrYtjnkk2Eqg4,18396
+-urllib3/connectionpool.py,sha256=IKoeuJZY9YAYm0GK4q-MXAhyXW0M_FnvabYaNsDIR-E,37133
+-urllib3/exceptions.py,sha256=lNrKC5J8zeBXIu9SSKSNb7cLi8iXl9ARu9DHD2SflZM,7810
+-urllib3/fields.py,sha256=kvLDCg_JmH1lLjUUEY_FLS8UhY7hBvDPuVETbY8mdrM,8579
+-urllib3/filepost.py,sha256=5b_qqgRHVlL7uLtdAYBzBh-GHmU5AfJVt_2N0XS3PeY,2440
+-urllib3/poolmanager.py,sha256=whzlX6UTEgODMOCy0ZDMUONRBCz5wyIM8Z9opXAY-Lk,19763
+-urllib3/request.py,sha256=ZFSIqX0C6WizixecChZ3_okyu7BEv0lZu1VT0s6h4SM,5985
+-urllib3/response.py,sha256=hGhGBh7TkEkh_IQg5C1W_xuPNrgIKv5BUXPyE-q0LuE,28203
+-urllib3/contrib/__init__.py,sha256=47DEQpj8HBSa-_TImW-5JCeuQeRkm5NMpJWZG3hSuFU,0
+-urllib3/contrib/_appengine_environ.py,sha256=bDbyOEhW2CKLJcQqAKAyrEHN-aklsyHFKq6vF8ZFsmk,957
+-urllib3/contrib/appengine.py,sha256=7Pxb0tKfDB_LTGPERiswH0qomhDoUUOo5kwybAKLQyE,11010
+-urllib3/contrib/ntlmpool.py,sha256=6I95h1_71fzxmoMSNtY0gB8lnyCoVtP_DpqFGj14fdU,4160
+-urllib3/contrib/pyopenssl.py,sha256=vgh6j52w9xgwq-3R2kfB5M2JblQATJfKAK3lIAc1kSg,16778
+-urllib3/contrib/securetransport.py,sha256=KxGPZk8d4YepWm7Rc-SBt1XrzIfnLKc8JkUVV75XzgE,34286
+-urllib3/contrib/socks.py,sha256=DcRjM2l0rQMIyhYrN6r-tnVkY6ZTDxHJlM8_usAkGCA,7097
+-urllib3/contrib/_securetransport/__init__.py,sha256=47DEQpj8HBSa-_TImW-5JCeuQeRkm5NMpJWZG3hSuFU,0
+-urllib3/contrib/_securetransport/bindings.py,sha256=E1_7ScsgOchfxneozbAueK7ziCwF35fna4DuDCYJ9_o,17637
+-urllib3/contrib/_securetransport/low_level.py,sha256=lgIdsSycqfB0Xm5BiJzXGeIKT7ybCQMFPJAgkcwPa1s,13908
+-urllib3/packages/__init__.py,sha256=h4BLhD4tLaBx1adaDtKXfupsgqY0wWLXb_f1_yVlV6A,108
+-urllib3/packages/six.py,sha256=adx4z-eM_D0Vvu0IIqVzFACQ_ux9l64y7DkSEfbxCDs,32536
+-urllib3/packages/backports/__init__.py,sha256=47DEQpj8HBSa-_TImW-5JCeuQeRkm5NMpJWZG3hSuFU,0
+-urllib3/packages/backports/makefile.py,sha256=nbzt3i0agPVP07jqqgjhaYjMmuAi_W5E0EywZivVO8E,1417
+-urllib3/packages/ssl_match_hostname/__init__.py,sha256=zppezdEQdpGsYerI6mV6MfUYy495JV4mcOWC_GgbljU,757
+-urllib3/packages/ssl_match_hostname/_implementation.py,sha256=6dZ-q074g7XhsJ27MFCgkct8iVNZB3sMZvKhf-KUVy0,5679
+-urllib3/util/__init__.py,sha256=JEmSmmqqLyaw8P51gUImZh8Gwg9i1zSe-DoqAitn2nc,1155
+-urllib3/util/connection.py,sha256=21B-LX0c8fkxPDssyHCaK0pCnmrKmhltg5EoouHiAPU,4910
+-urllib3/util/proxy.py,sha256=FGipAEnvZteyldXNjce4DEB7YzwU-a5lep8y5S0qHQg,1604
+-urllib3/util/queue.py,sha256=nRgX8_eX-_VkvxoX096QWoz8Ps0QHUAExILCY_7PncM,498
+-urllib3/util/request.py,sha256=NnzaEKQ1Pauw5MFMV6HmgEMHITf0Aua9fQuzi2uZzGc,4123
+-urllib3/util/response.py,sha256=GJpg3Egi9qaJXRwBh5wv-MNuRWan5BIu40oReoxWP28,3510
+-urllib3/util/retry.py,sha256=tn168HDMUynFmXRP-uVaLRUOlbTEJikoB1RuZdwfCes,21366
+-urllib3/util/ssl_.py,sha256=cUsmU604z2zAOZcaXDpINXOokQ1RtlJMe96TBDkaJp0,16199
+-urllib3/util/ssltransport.py,sha256=IvGQvs9YWkf4jzfqVjTu_UWjwAUgPn5ActajW8VLz6A,6908
+-urllib3/util/timeout.py,sha256=QSbBUNOB9yh6AnDn61SrLQ0hg5oz0I9-uXEG91AJuIg,10003
+-urllib3/util/url.py,sha256=LWfLSlI4l2FmUMKfCkElCaW10-0N-sJDT9bxaDZJkjs,13964
+-urllib3/util/wait.py,sha256=3MUKRSAUJDB2tgco7qRUskW0zXGAWYvRRE4Q1_6xlLs,5404
+-urllib3-1.26.0.dist-info/LICENSE.txt,sha256=w3vxhuJ8-dvpYZ5V7f486nswCRzrPaY8fay-Dm13kHs,1115
+-urllib3-1.26.0.dist-info/METADATA,sha256=Wghdt6nLf9HfZHhWj8Dpgz4n9vGRqXYhdIwJRPgki6M,42629
+-urllib3-1.26.0.dist-info/WHEEL,sha256=ADKeyaGyKF5DwBNE0sRE5pvW-bSkFMJfBuhzZ3rceP4,110
+-urllib3-1.26.0.dist-info/top_level.txt,sha256=EMiXL2sKrTcmrMxIHTqdc3ET54pQI2Y072LexFEemvo,8
+-urllib3-1.26.0.dist-info/RECORD,,
+diff --git a/third_party/python/urllib3/urllib3-1.26.0.dist-info/LICENSE.txt b/third_party/python/urllib3/urllib3-1.26.17.dist-info/LICENSE.txt
+similarity index 100%
+rename from third_party/python/urllib3/urllib3-1.26.0.dist-info/LICENSE.txt
+rename to third_party/python/urllib3/urllib3-1.26.17.dist-info/LICENSE.txt
+diff --git a/third_party/python/urllib3/urllib3-1.26.0.dist-info/METADATA b/third_party/python/urllib3/urllib3-1.26.17.dist-info/METADATA
+similarity index 86%
+rename from third_party/python/urllib3/urllib3-1.26.0.dist-info/METADATA
+rename to third_party/python/urllib3/urllib3-1.26.17.dist-info/METADATA
+index 39869aafad..9493faee66 100644
+--- a/third_party/python/urllib3/urllib3-1.26.0.dist-info/METADATA
++++ b/third_party/python/urllib3/urllib3-1.26.17.dist-info/METADATA
+@@ -1,6 +1,6 @@
+ Metadata-Version: 2.1
+ Name: urllib3
+-Version: 1.26.0
++Version: 1.26.17
+ Summary: HTTP library with thread-safe connection pooling, file post, and more.
+ Home-page: https://urllib3.readthedocs.io/
+ Author: Andrey Petrov
+@@ -10,7 +10,6 @@ Project-URL: Documentation, https://urllib3.readthedocs.io/
+ Project-URL: Code, https://github.com/urllib3/urllib3
+ Project-URL: Issue tracker, https://github.com/urllib3/urllib3/issues
+ Keywords: urllib httplib threadsafe filepost http https ssl pooling
+-Platform: UNKNOWN
+ Classifier: Environment :: Web Environment
+ Classifier: Intended Audience :: Developers
+ Classifier: License :: OSI Approved :: MIT License
+@@ -19,27 +18,33 @@ Classifier: Programming Language :: Python
+ Classifier: Programming Language :: Python :: 2
+ Classifier: Programming Language :: Python :: 2.7
+ Classifier: Programming Language :: Python :: 3
+-Classifier: Programming Language :: Python :: 3.5
+ Classifier: Programming Language :: Python :: 3.6
+ Classifier: Programming Language :: Python :: 3.7
+ Classifier: Programming Language :: Python :: 3.8
+ Classifier: Programming Language :: Python :: 3.9
++Classifier: Programming Language :: Python :: 3.10
++Classifier: Programming Language :: Python :: 3.11
+ Classifier: Programming Language :: Python :: Implementation :: CPython
+ Classifier: Programming Language :: Python :: Implementation :: PyPy
+ Classifier: Topic :: Internet :: WWW/HTTP
+ Classifier: Topic :: Software Development :: Libraries
+-Requires-Python: >=2.7, !=3.0.*, !=3.1.*, !=3.2.*, !=3.3.*, !=3.4.*, <4
++Requires-Python: >=2.7, !=3.0.*, !=3.1.*, !=3.2.*, !=3.3.*, !=3.4.*, !=3.5.*
+ Description-Content-Type: text/x-rst
++License-File: LICENSE.txt
+ Provides-Extra: brotli
+-Requires-Dist: brotlipy (>=0.6.0) ; extra == 'brotli'
++Requires-Dist: brotlicffi >=0.8.0 ; ((os_name != "nt" or python_version >= "3") and platform_python_implementation != "CPython") and extra == 'brotli'
++Requires-Dist: brotli ==1.0.9 ; (os_name != "nt" and python_version < "3" and platform_python_implementation == "CPython") and extra == 'brotli'
++Requires-Dist: brotlipy >=0.6.0 ; (os_name == "nt" and python_version < "3") and extra == 'brotli'
++Requires-Dist: brotli >=1.0.9 ; (python_version >= "3" and platform_python_implementation == "CPython") and extra == 'brotli'
+ Provides-Extra: secure
+-Requires-Dist: pyOpenSSL (>=0.14) ; extra == 'secure'
+-Requires-Dist: cryptography (>=1.3.4) ; extra == 'secure'
+-Requires-Dist: idna (>=2.0.0) ; extra == 'secure'
++Requires-Dist: pyOpenSSL >=0.14 ; extra == 'secure'
++Requires-Dist: cryptography >=1.3.4 ; extra == 'secure'
++Requires-Dist: idna >=2.0.0 ; extra == 'secure'
+ Requires-Dist: certifi ; extra == 'secure'
++Requires-Dist: urllib3-secure-extra ; extra == 'secure'
+ Requires-Dist: ipaddress ; (python_version == "2.7") and extra == 'secure'
+ Provides-Extra: socks
+-Requires-Dist: PySocks (!=1.5.7,<2.0,>=1.5.6) ; extra == 'socks'
++Requires-Dist: PySocks !=1.5.7,<2.0,>=1.5.6 ; extra == 'socks'
+ 
+ 
+ urllib3 is a powerful, *user-friendly* HTTP client for Python. Much of the
+@@ -78,8 +83,10 @@ urllib3 can be installed with `pip <https://pip.pypa.io>`_::
+ 
+ Alternatively, you can grab the latest source code from `GitHub <https://github.com/urllib3/urllib3>`_::
+ 
+-    $ git clone git://github.com/urllib3/urllib3.git
+-    $ python setup.py install
++    $ git clone https://github.com/urllib3/urllib3.git
++    $ cd urllib3
++    $ git checkout 1.26.x
++    $ pip install .
+ 
+ 
+ Documentation
+@@ -148,6 +155,152 @@ For Enterprise
+ Changes
+ =======
+ 
++1.26.17 (2023-10-02)
++--------------------
++
++* Added the ``Cookie`` header to the list of headers to strip from requests when redirecting to a different host. As before, different headers can be set via ``Retry.remove_headers_on_redirect``.
++
++
++1.26.16 (2023-05-23)
++--------------------
++
++* Fixed thread-safety issue where accessing a ``PoolManager`` with many distinct origins
++  would cause connection pools to be closed while requests are in progress (`#2954 <https://github.com/urllib3/urllib3/pull/2954>`_)
++
++
++1.26.15 (2023-03-10)
++--------------------
++
++* Fix socket timeout value when ``HTTPConnection`` is reused (`#2645 <https://github.com/urllib3/urllib3/issues/2645>`__)
++* Remove "!" character from the unreserved characters in IPv6 Zone ID parsing
++  (`#2899 <https://github.com/urllib3/urllib3/issues/2899>`__)
++* Fix IDNA handling of '\x80' byte (`#2901 <https://github.com/urllib3/urllib3/issues/2901>`__)
++
++1.26.14 (2023-01-11)
++--------------------
++
++* Fixed parsing of port 0 (zero) returning None, instead of 0. (`#2850 <https://github.com/urllib3/urllib3/issues/2850>`__)
++* Removed deprecated getheaders() calls in contrib module.
++
++1.26.13 (2022-11-23)
++--------------------
++
++* Deprecated the ``HTTPResponse.getheaders()`` and ``HTTPResponse.getheader()`` methods.
++* Fixed an issue where parsing a URL with leading zeroes in the port would be rejected
++  even when the port number after removing the zeroes was valid.
++* Fixed a deprecation warning when using cryptography v39.0.0.
++* Removed the ``<4`` in the ``Requires-Python`` packaging metadata field.
++
++
++1.26.12 (2022-08-22)
++--------------------
++
++* Deprecated the `urllib3[secure]` extra and the `urllib3.contrib.pyopenssl` module.
++  Both will be removed in v2.x. See this `GitHub issue <https://github.com/urllib3/urllib3/issues/2680>`_
++  for justification and info on how to migrate.
++
++
++1.26.11 (2022-07-25)
++--------------------
++
++* Fixed an issue where reading more than 2 GiB in a call to ``HTTPResponse.read`` would
++  raise an ``OverflowError`` on Python 3.9 and earlier.
++
++
++1.26.10 (2022-07-07)
++--------------------
++
++* Removed support for Python 3.5
++* Fixed an issue where a ``ProxyError`` recommending configuring the proxy as HTTP
++  instead of HTTPS could appear even when an HTTPS proxy wasn't configured.
++
++
++1.26.9 (2022-03-16)
++-------------------
++
++* Changed ``urllib3[brotli]`` extra to favor installing Brotli libraries that are still
++  receiving updates like ``brotli`` and ``brotlicffi`` instead of ``brotlipy``.
++  This change does not impact behavior of urllib3, only which dependencies are installed.
++* Fixed a socket leaking when ``HTTPSConnection.connect()`` raises an exception.
++* Fixed ``server_hostname`` being forwarded from ``PoolManager`` to ``HTTPConnectionPool``
++  when requesting an HTTP URL. Should only be forwarded when requesting an HTTPS URL.
++
++
++1.26.8 (2022-01-07)
++-------------------
++
++* Added extra message to ``urllib3.exceptions.ProxyError`` when urllib3 detects that
++  a proxy is configured to use HTTPS but the proxy itself appears to only use HTTP.
++* Added a mention of the size of the connection pool when discarding a connection due to the pool being full.
++* Added explicit support for Python 3.11.
++* Deprecated the ``Retry.MAX_BACKOFF`` class property in favor of ``Retry.DEFAULT_MAX_BACKOFF``
++  to better match the rest of the default parameter names. ``Retry.MAX_BACKOFF`` is removed in v2.0.
++* Changed location of the vendored ``ssl.match_hostname`` function from ``urllib3.packages.ssl_match_hostname``
++  to ``urllib3.util.ssl_match_hostname`` to ensure Python 3.10+ compatibility after being repackaged
++  by downstream distributors.
++* Fixed absolute imports, all imports are now relative.
++
++
++1.26.7 (2021-09-22)
++-------------------
++
++* Fixed a bug with HTTPS hostname verification involving IP addresses and lack
++  of SNI. (Issue #2400)
++* Fixed a bug where IPv6 braces weren't stripped during certificate hostname
++  matching. (Issue #2240)
++
++
++1.26.6 (2021-06-25)
++-------------------
++
++* Deprecated the ``urllib3.contrib.ntlmpool`` module. urllib3 is not able to support
++  it properly due to `reasons listed in this issue <https://github.com/urllib3/urllib3/issues/2282>`_.
++  If you are a user of this module please leave a comment.
++* Changed ``HTTPConnection.request_chunked()`` to not erroneously emit multiple
++  ``Transfer-Encoding`` headers in the case that one is already specified.
++* Fixed typo in deprecation message to recommend ``Retry.DEFAULT_ALLOWED_METHODS``.
++
++
++1.26.5 (2021-05-26)
++-------------------
++
++* Fixed deprecation warnings emitted in Python 3.10.
++* Updated vendored ``six`` library to 1.16.0.
++* Improved performance of URL parser when splitting
++  the authority component.
++
++
++1.26.4 (2021-03-15)
++-------------------
++
++* Changed behavior of the default ``SSLContext`` when connecting to HTTPS proxy
++  during HTTPS requests. The default ``SSLContext`` now sets ``check_hostname=True``.
++
++
++1.26.3 (2021-01-26)
++-------------------
++
++* Fixed bytes and string comparison issue with headers (Pull #2141)
++
++* Changed ``ProxySchemeUnknown`` error message to be
++  more actionable if the user supplies a proxy URL without
++  a scheme. (Pull #2107)
++
++
++1.26.2 (2020-11-12)
++-------------------
++
++* Fixed an issue where ``wrap_socket`` and ``CERT_REQUIRED`` wouldn't
++  be imported properly on Python 2.7.8 and earlier (Pull #2052)
++
++
++1.26.1 (2020-11-11)
++-------------------
++
++* Fixed an issue where two ``User-Agent`` headers would be sent if a
++  ``User-Agent`` header key is passed as ``bytes`` (Pull #2047)
++
++
+ 1.26.0 (2020-11-10)
+ -------------------
+ 
+@@ -1331,5 +1484,3 @@ Changes
+ ----------------
+ 
+ * First release.
+-
+-
+diff --git a/third_party/python/urllib3/urllib3-1.26.17.dist-info/RECORD b/third_party/python/urllib3/urllib3-1.26.17.dist-info/RECORD
+new file mode 100644
+index 0000000000..1afc658058
+--- /dev/null
++++ b/third_party/python/urllib3/urllib3-1.26.17.dist-info/RECORD
+@@ -0,0 +1,44 @@
++urllib3/__init__.py,sha256=iXLcYiJySn0GNbWOOZDDApgBL1JgP44EZ8i1760S8Mc,3333
++urllib3/_collections.py,sha256=Rp1mVyBgc_UlAcp6M3at1skJBXR5J43NawRTvW2g_XY,10811
++urllib3/_version.py,sha256=azoM7M7BUADl2kBhMVR6PPf2GhBDI90me1fcnzTwdcw,64
++urllib3/connection.py,sha256=92k9td_y4PEiTIjNufCUa1NzMB3J3w0LEdyokYgXnW8,20300
++urllib3/connectionpool.py,sha256=ItVDasDnPRPP9R8bNxY7tPBlC724nJ9nlxVgXG_SLbI,39990
++urllib3/exceptions.py,sha256=0Mnno3KHTNfXRfY7638NufOPkUb6mXOm-Lqj-4x2w8A,8217
++urllib3/fields.py,sha256=kvLDCg_JmH1lLjUUEY_FLS8UhY7hBvDPuVETbY8mdrM,8579
++urllib3/filepost.py,sha256=5b_qqgRHVlL7uLtdAYBzBh-GHmU5AfJVt_2N0XS3PeY,2440
++urllib3/poolmanager.py,sha256=0i8cJgrqupza67IBPZ_u9jXvnSxr5UBlVEiUqdkPtYI,19752
++urllib3/request.py,sha256=YTWFNr7QIwh7E1W9dde9LM77v2VWTJ5V78XuTTw7D1A,6691
++urllib3/response.py,sha256=UPgLmnHj4z71ZnH8ivYOyncATifTOw9FQukUqDnckCc,30761
++urllib3/contrib/__init__.py,sha256=47DEQpj8HBSa-_TImW-5JCeuQeRkm5NMpJWZG3hSuFU,0
++urllib3/contrib/_appengine_environ.py,sha256=bDbyOEhW2CKLJcQqAKAyrEHN-aklsyHFKq6vF8ZFsmk,957
++urllib3/contrib/appengine.py,sha256=6IBW6lPOoVUxASPwtn6IH1AATe5DK3lLJCfwyWlLKAE,11012
++urllib3/contrib/ntlmpool.py,sha256=NlfkW7WMdW8ziqudopjHoW299og1BTWi0IeIibquFwk,4528
++urllib3/contrib/pyopenssl.py,sha256=4AJAlo9NmjWofY4dJwRa4kbZuRuHfNJxu8Pv6yQk1ss,17055
++urllib3/contrib/securetransport.py,sha256=QOhVbWrFQTKbmV-vtyG69amekkKVxXkdjk9oymaO0Ag,34416
++urllib3/contrib/socks.py,sha256=aRi9eWXo9ZEb95XUxef4Z21CFlnnjbEiAo9HOseoMt4,7097
++urllib3/contrib/_securetransport/__init__.py,sha256=47DEQpj8HBSa-_TImW-5JCeuQeRkm5NMpJWZG3hSuFU,0
++urllib3/contrib/_securetransport/bindings.py,sha256=4Xk64qIkPBt09A5q-RIFUuDhNc9mXilVapm7WnYnzRw,17632
++urllib3/contrib/_securetransport/low_level.py,sha256=B2JBB2_NRP02xK6DCa1Pa9IuxrPwxzDzZbixQkb7U9M,13922
++urllib3/packages/__init__.py,sha256=47DEQpj8HBSa-_TImW-5JCeuQeRkm5NMpJWZG3hSuFU,0
++urllib3/packages/six.py,sha256=b9LM0wBXv7E7SrbCjAm4wwN-hrH-iNxv18LgWNMMKPo,34665
++urllib3/packages/backports/__init__.py,sha256=47DEQpj8HBSa-_TImW-5JCeuQeRkm5NMpJWZG3hSuFU,0
++urllib3/packages/backports/makefile.py,sha256=nbzt3i0agPVP07jqqgjhaYjMmuAi_W5E0EywZivVO8E,1417
++urllib3/packages/backports/weakref_finalize.py,sha256=tRCal5OAhNSRyb0DhHp-38AtIlCsRP8BxF3NX-6rqIA,5343
++urllib3/util/__init__.py,sha256=JEmSmmqqLyaw8P51gUImZh8Gwg9i1zSe-DoqAitn2nc,1155
++urllib3/util/connection.py,sha256=5Lx2B1PW29KxBn2T0xkN1CBgRBa3gGVJBKoQoRogEVk,4901
++urllib3/util/proxy.py,sha256=zUvPPCJrp6dOF0N4GAVbOcl6o-4uXKSrGiTkkr5vUS4,1605
++urllib3/util/queue.py,sha256=nRgX8_eX-_VkvxoX096QWoz8Ps0QHUAExILCY_7PncM,498
++urllib3/util/request.py,sha256=fWiAaa8pwdLLIqoTLBxCC2e4ed80muzKU3e3HWWTzFQ,4225
++urllib3/util/response.py,sha256=GJpg3Egi9qaJXRwBh5wv-MNuRWan5BIu40oReoxWP28,3510
++urllib3/util/retry.py,sha256=Z6WEf518eTOXP5jr5QSQ9gqJI0DVYt3Xs3EKnYaTmus,22013
++urllib3/util/ssl_.py,sha256=c0sYiSC6272r6uPkxQpo5rYPP9QC1eR6oI7004gYqZo,17165
++urllib3/util/ssl_match_hostname.py,sha256=Ir4cZVEjmAk8gUAIHWSi7wtOO83UCYABY2xFD1Ql_WA,5758
++urllib3/util/ssltransport.py,sha256=NA-u5rMTrDFDFC8QzRKUEKMG0561hOD4qBTr3Z4pv6E,6895
++urllib3/util/timeout.py,sha256=cwq4dMk87mJHSBktK1miYJ-85G-3T3RmT20v7SFCpno,10168
++urllib3/util/url.py,sha256=kMxL1k0d-aQm_iZDw_zMmnyYyjrIA_DbsMy3cm3V55M,14279
++urllib3/util/wait.py,sha256=fOX0_faozG2P7iVojQoE1mbydweNyTcm-hXEfFrTtLI,5403
++urllib3-1.26.17.dist-info/LICENSE.txt,sha256=w3vxhuJ8-dvpYZ5V7f486nswCRzrPaY8fay-Dm13kHs,1115
++urllib3-1.26.17.dist-info/METADATA,sha256=swEiQKmb2m5Vl4fygmy4aLSzZjxDjD8q2-_XzuhO9pA,48743
++urllib3-1.26.17.dist-info/WHEEL,sha256=iYlv5fX357PQyRT2o6tw1bN-YcKFFHKqB_LwHO5wP-g,110
++urllib3-1.26.17.dist-info/top_level.txt,sha256=EMiXL2sKrTcmrMxIHTqdc3ET54pQI2Y072LexFEemvo,8
++urllib3-1.26.17.dist-info/RECORD,,
+diff --git a/third_party/python/six/six-1.13.0.dist-info/WHEEL b/third_party/python/urllib3/urllib3-1.26.17.dist-info/WHEEL
+similarity index 70%
+rename from third_party/python/six/six-1.13.0.dist-info/WHEEL
+rename to third_party/python/urllib3/urllib3-1.26.17.dist-info/WHEEL
+index 8b701e93c2..c34f1162ef 100644
+--- a/third_party/python/six/six-1.13.0.dist-info/WHEEL
++++ b/third_party/python/urllib3/urllib3-1.26.17.dist-info/WHEEL
+@@ -1,5 +1,5 @@
+ Wheel-Version: 1.0
+-Generator: bdist_wheel (0.33.6)
++Generator: bdist_wheel (0.41.2)
+ Root-Is-Purelib: true
+ Tag: py2-none-any
+ Tag: py3-none-any
+diff --git a/third_party/python/urllib3/urllib3-1.26.0.dist-info/top_level.txt b/third_party/python/urllib3/urllib3-1.26.17.dist-info/top_level.txt
+similarity index 100%
+rename from third_party/python/urllib3/urllib3-1.26.0.dist-info/top_level.txt
+rename to third_party/python/urllib3/urllib3-1.26.17.dist-info/top_level.txt
+diff --git a/third_party/python/urllib3/urllib3/__init__.py b/third_party/python/urllib3/urllib3/__init__.py
+index fe86b59d78..c6fa38212f 100644
+--- a/third_party/python/urllib3/urllib3/__init__.py
++++ b/third_party/python/urllib3/urllib3/__init__.py
+@@ -19,6 +19,23 @@ from .util.retry import Retry
+ from .util.timeout import Timeout
+ from .util.url import get_host
+ 
++# === NOTE TO REPACKAGERS AND VENDORS ===
++# Please delete this block, this logic is only
++# for urllib3 being distributed via PyPI.
++# See: https://github.com/urllib3/urllib3/issues/2680
++try:
++    import urllib3_secure_extra  # type: ignore # noqa: F401
++except ImportError:
++    pass
++else:
++    warnings.warn(
++        "'urllib3[secure]' extra is deprecated and will be removed "
++        "in a future release of urllib3 2.x. Read more in this issue: "
++        "https://github.com/urllib3/urllib3/issues/2680",
++        category=DeprecationWarning,
++        stacklevel=2,
++    )
++
+ __author__ = "Andrey Petrov (andrey.petrov@shazow.net)"
+ __license__ = "MIT"
+ __version__ = __version__
+diff --git a/third_party/python/urllib3/urllib3/_version.py b/third_party/python/urllib3/urllib3/_version.py
+index cee465f88a..cad75fb5df 100644
+--- a/third_party/python/urllib3/urllib3/_version.py
++++ b/third_party/python/urllib3/urllib3/_version.py
+@@ -1,2 +1,2 @@
+ # This file is protected via CODEOWNERS
+-__version__ = "1.26.0"
++__version__ = "1.26.17"
+diff --git a/third_party/python/urllib3/urllib3/connection.py b/third_party/python/urllib3/urllib3/connection.py
+index 52487417c9..54b96b1915 100644
+--- a/third_party/python/urllib3/urllib3/connection.py
++++ b/third_party/python/urllib3/urllib3/connection.py
+@@ -43,6 +43,7 @@ except NameError:  # Python 2:
+         pass
+ 
+ 
++from ._collections import HTTPHeaderDict  # noqa (historical, removed in v2)
+ from ._version import __version__
+ from .exceptions import (
+     ConnectTimeoutError,
+@@ -50,15 +51,16 @@ from .exceptions import (
+     SubjectAltNameWarning,
+     SystemTimeWarning,
+ )
+-from .packages.ssl_match_hostname import CertificateError, match_hostname
+ from .util import SKIP_HEADER, SKIPPABLE_HEADERS, connection
+ from .util.ssl_ import (
+     assert_fingerprint,
+     create_urllib3_context,
++    is_ipaddress,
+     resolve_cert_reqs,
+     resolve_ssl_version,
+     ssl_wrap_socket,
+ )
++from .util.ssl_match_hostname import CertificateError, match_hostname
+ 
+ log = logging.getLogger(__name__)
+ 
+@@ -66,7 +68,7 @@ port_by_scheme = {"http": 80, "https": 443}
+ 
+ # When it comes time to update this value as a part of regular maintenance
+ # (ie test_recent_date is failing) update it to ~6 months before the current date.
+-RECENT_DATE = datetime.date(2019, 1, 1)
++RECENT_DATE = datetime.date(2022, 1, 1)
+ 
+ _CONTAINS_CONTROL_CHAR_RE = re.compile(r"[^-!#$%&'*+.^_`|~0-9a-zA-Z]")
+ 
+@@ -106,6 +108,10 @@ class HTTPConnection(_HTTPConnection, object):
+     #: Whether this connection verifies the host's certificate.
+     is_verified = False
+ 
++    #: Whether this proxy connection (if used) verifies the proxy host's
++    #: certificate.
++    proxy_is_verified = None
++
+     def __init__(self, *args, **kw):
+         if not six.PY2:
+             kw.pop("strict", None)
+@@ -200,7 +206,7 @@ class HTTPConnection(_HTTPConnection, object):
+         self._prepare_conn(conn)
+ 
+     def putrequest(self, method, url, *args, **kwargs):
+-        """"""
++        """ """
+         # Empty docstring because the indentation of CPython's implementation
+         # is broken but we don't want this method in our documentation.
+         match = _CONTAINS_CONTROL_CHAR_RE.search(method)
+@@ -213,8 +219,8 @@ class HTTPConnection(_HTTPConnection, object):
+         return _HTTPConnection.putrequest(self, method, url, *args, **kwargs)
+ 
+     def putheader(self, header, *values):
+-        """"""
+-        if SKIP_HEADER not in values:
++        """ """
++        if not any(isinstance(v, str) and v == SKIP_HEADER for v in values):
+             _HTTPConnection.putheader(self, header, *values)
+         elif six.ensure_str(header.lower()) not in SKIPPABLE_HEADERS:
+             raise ValueError(
+@@ -223,12 +229,17 @@ class HTTPConnection(_HTTPConnection, object):
+             )
+ 
+     def request(self, method, url, body=None, headers=None):
++        # Update the inner socket's timeout value to send the request.
++        # This only triggers if the connection is re-used.
++        if getattr(self, "sock", None) is not None:
++            self.sock.settimeout(self.timeout)
++
+         if headers is None:
+             headers = {}
+         else:
+             # Avoid modifying the headers passed into .request()
+             headers = headers.copy()
+-        if "user-agent" not in (k.lower() for k in headers):
++        if "user-agent" not in (six.ensure_str(k.lower()) for k in headers):
+             headers["User-Agent"] = _get_default_user_agent()
+         super(HTTPConnection, self).request(method, url, body=body, headers=headers)
+ 
+@@ -248,7 +259,7 @@ class HTTPConnection(_HTTPConnection, object):
+             self.putheader("User-Agent", _get_default_user_agent())
+         for header, value in headers.items():
+             self.putheader(header, value)
+-        if "transfer-encoding" not in headers:
++        if "transfer-encoding" not in header_keys:
+             self.putheader("Transfer-Encoding", "chunked")
+         self.endheaders()
+ 
+@@ -349,17 +360,15 @@ class HTTPSConnection(HTTPConnection):
+ 
+     def connect(self):
+         # Add certificate verification
+-        conn = self._new_conn()
++        self.sock = conn = self._new_conn()
+         hostname = self.host
+         tls_in_tls = False
+ 
+         if self._is_using_tunnel():
+             if self.tls_in_tls_required:
+-                conn = self._connect_tls_proxy(hostname, conn)
++                self.sock = conn = self._connect_tls_proxy(hostname, conn)
+                 tls_in_tls = True
+ 
+-            self.sock = conn
+-
+             # Calls self._set_hostport(), so self.host is
+             # self._tunnel_host below.
+             self._tunnel()
+@@ -492,7 +501,7 @@ class HTTPSConnection(HTTPConnection):
+ 
+         # If no cert was provided, use only the default options for server
+         # certificate validation
+-        return ssl_wrap_socket(
++        socket = ssl_wrap_socket(
+             sock=conn,
+             ca_certs=self.ca_certs,
+             ca_cert_dir=self.ca_cert_dir,
+@@ -501,8 +510,37 @@ class HTTPSConnection(HTTPConnection):
+             ssl_context=ssl_context,
+         )
+ 
++        if ssl_context.verify_mode != ssl.CERT_NONE and not getattr(
++            ssl_context, "check_hostname", False
++        ):
++            # While urllib3 attempts to always turn off hostname matching from
++            # the TLS library, this cannot always be done. So we check whether
++            # the TLS Library still thinks it's matching hostnames.
++            cert = socket.getpeercert()
++            if not cert.get("subjectAltName", ()):
++                warnings.warn(
++                    (
++                        "Certificate for {0} has no `subjectAltName`, falling back to check for a "
++                        "`commonName` for now. This feature is being removed by major browsers and "
++                        "deprecated by RFC 2818. (See https://github.com/urllib3/urllib3/issues/497 "
++                        "for details.)".format(hostname)
++                    ),
++                    SubjectAltNameWarning,
++                )
++            _match_hostname(cert, hostname)
++
++        self.proxy_is_verified = ssl_context.verify_mode == ssl.CERT_REQUIRED
++        return socket
++
+ 
+ def _match_hostname(cert, asserted_hostname):
++    # Our upstream implementation of ssl.match_hostname()
++    # only applies this normalization to IP addresses so it doesn't
++    # match DNS SANs so we do the same thing!
++    stripped_hostname = asserted_hostname.strip("u[]")
++    if is_ipaddress(stripped_hostname):
++        asserted_hostname = stripped_hostname
++
+     try:
+         match_hostname(cert, asserted_hostname)
+     except CertificateError as e:
+diff --git a/third_party/python/urllib3/urllib3/connectionpool.py b/third_party/python/urllib3/urllib3/connectionpool.py
+index 4708c5bfc7..96844d9337 100644
+--- a/third_party/python/urllib3/urllib3/connectionpool.py
++++ b/third_party/python/urllib3/urllib3/connectionpool.py
+@@ -2,6 +2,7 @@ from __future__ import absolute_import
+ 
+ import errno
+ import logging
++import re
+ import socket
+ import sys
+ import warnings
+@@ -35,7 +36,6 @@ from .exceptions import (
+ )
+ from .packages import six
+ from .packages.six.moves import queue
+-from .packages.ssl_match_hostname import CertificateError
+ from .request import RequestMethods
+ from .response import HTTPResponse
+ from .util.connection import is_connection_dropped
+@@ -44,11 +44,19 @@ from .util.queue import LifoQueue
+ from .util.request import set_file_position
+ from .util.response import assert_header_parsing
+ from .util.retry import Retry
++from .util.ssl_match_hostname import CertificateError
+ from .util.timeout import Timeout
+ from .util.url import Url, _encode_target
+ from .util.url import _normalize_host as normalize_host
+ from .util.url import get_host, parse_url
+ 
++try:  # Platform-specific: Python 3
++    import weakref
++
++    weakref_finalize = weakref.finalize
++except AttributeError:  # Platform-specific: Python 2
++    from .packages.backports.weakref_finalize import weakref_finalize
++
+ xrange = six.moves.xrange
+ 
+ log = logging.getLogger(__name__)
+@@ -219,6 +227,16 @@ class HTTPConnectionPool(ConnectionPool, RequestMethods):
+             self.conn_kw["proxy"] = self.proxy
+             self.conn_kw["proxy_config"] = self.proxy_config
+ 
++        # Do not pass 'self' as callback to 'finalize'.
++        # Then the 'finalize' would keep an endless living (leak) to self.
++        # By just passing a reference to the pool allows the garbage collector
++        # to free self if nobody else has a reference to it.
++        pool = self.pool
++
++        # Close all the HTTPConnections in the pool before the
++        # HTTPConnectionPool object is garbage collected.
++        weakref_finalize(self, _close_pool_connections, pool)
++
+     def _new_conn(self):
+         """
+         Return a fresh :class:`HTTPConnection`.
+@@ -301,8 +319,11 @@ class HTTPConnectionPool(ConnectionPool, RequestMethods):
+             pass
+         except queue.Full:
+             # This should never happen if self.block == True
+-            log.warning("Connection pool is full, discarding connection: %s", self.host)
+-
++            log.warning(
++                "Connection pool is full, discarding connection: %s. Connection pool size: %s",
++                self.host,
++                self.pool.qsize(),
++            )
+         # Connection never got put back into the pool, close it.
+         if conn:
+             conn.close()
+@@ -318,7 +339,7 @@ class HTTPConnectionPool(ConnectionPool, RequestMethods):
+         pass
+ 
+     def _get_timeout(self, timeout):
+-        """ Helper that always returns a :class:`urllib3.util.Timeout` """
++        """Helper that always returns a :class:`urllib3.util.Timeout`"""
+         if timeout is _Default:
+             return self.timeout.clone()
+ 
+@@ -375,7 +396,7 @@ class HTTPConnectionPool(ConnectionPool, RequestMethods):
+ 
+         timeout_obj = self._get_timeout(timeout)
+         timeout_obj.start_connect()
+-        conn.timeout = timeout_obj.connect_timeout
++        conn.timeout = Timeout.resolve_default_timeout(timeout_obj.connect_timeout)
+ 
+         # Trigger any extra validation we need to do.
+         try:
+@@ -485,14 +506,8 @@ class HTTPConnectionPool(ConnectionPool, RequestMethods):
+         # Disable access to the pool
+         old_pool, self.pool = self.pool, None
+ 
+-        try:
+-            while True:
+-                conn = old_pool.get(block=False)
+-                if conn:
+-                    conn.close()
+-
+-        except queue.Empty:
+-            pass  # Done.
++        # Close all the HTTPConnections in the pool.
++        _close_pool_connections(old_pool)
+ 
+     def is_same_host(self, url):
+         """
+@@ -745,7 +760,35 @@ class HTTPConnectionPool(ConnectionPool, RequestMethods):
+             # Discard the connection for these exceptions. It will be
+             # replaced during the next _get_conn() call.
+             clean_exit = False
+-            if isinstance(e, (BaseSSLError, CertificateError)):
++
++            def _is_ssl_error_message_from_http_proxy(ssl_error):
++                # We're trying to detect the message 'WRONG_VERSION_NUMBER' but
++                # SSLErrors are kinda all over the place when it comes to the message,
++                # so we try to cover our bases here!
++                message = " ".join(re.split("[^a-z]", str(ssl_error).lower()))
++                return (
++                    "wrong version number" in message or "unknown protocol" in message
++                )
++
++            # Try to detect a common user error with proxies which is to
++            # set an HTTP proxy to be HTTPS when it should be 'http://'
++            # (ie {'http': 'http://proxy', 'https': 'https://proxy'})
++            # Instead we add a nice error message and point to a URL.
++            if (
++                isinstance(e, BaseSSLError)
++                and self.proxy
++                and _is_ssl_error_message_from_http_proxy(e)
++                and conn.proxy
++                and conn.proxy.scheme == "https"
++            ):
++                e = ProxyError(
++                    "Your proxy appears to only use HTTP and not HTTPS, "
++                    "try changing your proxy URL to be HTTP. See: "
++                    "https://urllib3.readthedocs.io/en/1.26.x/advanced-usage.html"
++                    "#https-proxy-error-http-proxy",
++                    SSLError(e),
++                )
++            elif isinstance(e, (BaseSSLError, CertificateError)):
+                 e = SSLError(e)
+             elif isinstance(e, (SocketError, NewConnectionError)) and self.proxy:
+                 e = ProxyError("Cannot connect to proxy.", e)
+@@ -830,7 +873,7 @@ class HTTPConnectionPool(ConnectionPool, RequestMethods):
+             )
+ 
+         # Check if we should retry the HTTP response.
+-        has_retry_after = bool(response.getheader("Retry-After"))
++        has_retry_after = bool(response.headers.get("Retry-After"))
+         if retries.is_retry(method, response.status, has_retry_after):
+             try:
+                 retries = retries.increment(method, url, response=response, _pool=self)
+@@ -1014,12 +1057,23 @@ class HTTPSConnectionPool(HTTPConnectionPool):
+                 (
+                     "Unverified HTTPS request is being made to host '%s'. "
+                     "Adding certificate verification is strongly advised. See: "
+-                    "https://urllib3.readthedocs.io/en/latest/advanced-usage.html"
++                    "https://urllib3.readthedocs.io/en/1.26.x/advanced-usage.html"
+                     "#ssl-warnings" % conn.host
+                 ),
+                 InsecureRequestWarning,
+             )
+ 
++        if getattr(conn, "proxy_is_verified", None) is False:
++            warnings.warn(
++                (
++                    "Unverified HTTPS connection done to an HTTPS proxy. "
++                    "Adding certificate verification is strongly advised. See: "
++                    "https://urllib3.readthedocs.io/en/1.26.x/advanced-usage.html"
++                    "#ssl-warnings"
++                ),
++                InsecureRequestWarning,
++            )
++
+ 
+ def connection_from_url(url, **kw):
+     """
+@@ -1065,3 +1119,14 @@ def _normalize_host(host, scheme):
+     if host.startswith("[") and host.endswith("]"):
+         host = host[1:-1]
+     return host
++
++
++def _close_pool_connections(pool):
++    """Drains a queue of connections and closes each one."""
++    try:
++        while True:
++            conn = pool.get(block=False)
++            if conn:
++                conn.close()
++    except queue.Empty:
++        pass  # Done.
+diff --git a/third_party/python/urllib3/urllib3/contrib/_securetransport/bindings.py b/third_party/python/urllib3/urllib3/contrib/_securetransport/bindings.py
+index 11524d400b..264d564dbd 100644
+--- a/third_party/python/urllib3/urllib3/contrib/_securetransport/bindings.py
++++ b/third_party/python/urllib3/urllib3/contrib/_securetransport/bindings.py
+@@ -48,7 +48,7 @@ from ctypes import (
+ )
+ from ctypes.util import find_library
+ 
+-from urllib3.packages.six import raise_from
++from ...packages.six import raise_from
+ 
+ if platform.system() != "Darwin":
+     raise ImportError("Only macOS is supported")
+diff --git a/third_party/python/urllib3/urllib3/contrib/_securetransport/low_level.py b/third_party/python/urllib3/urllib3/contrib/_securetransport/low_level.py
+index ed8120190c..fa0b245d27 100644
+--- a/third_party/python/urllib3/urllib3/contrib/_securetransport/low_level.py
++++ b/third_party/python/urllib3/urllib3/contrib/_securetransport/low_level.py
+@@ -188,6 +188,7 @@ def _cert_array_from_pem(pem_bundle):
+         # We only want to do that if an error occurs: otherwise, the caller
+         # should free.
+         CoreFoundation.CFRelease(cert_array)
++        raise
+ 
+     return cert_array
+ 
+diff --git a/third_party/python/urllib3/urllib3/contrib/appengine.py b/third_party/python/urllib3/urllib3/contrib/appengine.py
+index aa64a0914c..a5a6d91035 100644
+--- a/third_party/python/urllib3/urllib3/contrib/appengine.py
++++ b/third_party/python/urllib3/urllib3/contrib/appengine.py
+@@ -111,7 +111,7 @@ class AppEngineManager(RequestMethods):
+         warnings.warn(
+             "urllib3 is using URLFetch on Google App Engine sandbox instead "
+             "of sockets. To use sockets directly instead of URLFetch see "
+-            "https://urllib3.readthedocs.io/en/latest/reference/urllib3.contrib.html.",
++            "https://urllib3.readthedocs.io/en/1.26.x/reference/urllib3.contrib.html.",
+             AppEnginePlatformWarning,
+         )
+ 
+@@ -224,7 +224,7 @@ class AppEngineManager(RequestMethods):
+                 )
+ 
+         # Check if we should retry the HTTP response.
+-        has_retry_after = bool(http_response.getheader("Retry-After"))
++        has_retry_after = bool(http_response.headers.get("Retry-After"))
+         if retries.is_retry(method, http_response.status, has_retry_after):
+             retries = retries.increment(method, url, response=http_response, _pool=self)
+             log.debug("Retry: %s", url)
+diff --git a/third_party/python/urllib3/urllib3/contrib/ntlmpool.py b/third_party/python/urllib3/urllib3/contrib/ntlmpool.py
+index b2df45dcf6..471665754e 100644
+--- a/third_party/python/urllib3/urllib3/contrib/ntlmpool.py
++++ b/third_party/python/urllib3/urllib3/contrib/ntlmpool.py
+@@ -5,6 +5,7 @@ Issue #10, see: http://code.google.com/p/urllib3/issues/detail?id=10
+ """
+ from __future__ import absolute_import
+ 
++import warnings
+ from logging import getLogger
+ 
+ from ntlm import ntlm
+@@ -12,6 +13,14 @@ from ntlm import ntlm
+ from .. import HTTPSConnectionPool
+ from ..packages.six.moves.http_client import HTTPSConnection
+ 
++warnings.warn(
++    "The 'urllib3.contrib.ntlmpool' module is deprecated and will be removed "
++    "in urllib3 v2.0 release, urllib3 is not able to support it properly due "
++    "to reasons listed in issue: https://github.com/urllib3/urllib3/issues/2282. "
++    "If you are a user of this module please comment in the mentioned issue.",
++    DeprecationWarning,
++)
++
+ log = getLogger(__name__)
+ 
+ 
+@@ -60,7 +69,7 @@ class NTLMConnectionPool(HTTPSConnectionPool):
+         log.debug("Request headers: %s", headers)
+         conn.request("GET", self.authurl, None, headers)
+         res = conn.getresponse()
+-        reshdr = dict(res.getheaders())
++        reshdr = dict(res.headers)
+         log.debug("Response status: %s %s", res.status, res.reason)
+         log.debug("Response headers: %s", reshdr)
+         log.debug("Response data: %s [...]", res.read(100))
+@@ -92,7 +101,7 @@ class NTLMConnectionPool(HTTPSConnectionPool):
+         conn.request("GET", self.authurl, None, headers)
+         res = conn.getresponse()
+         log.debug("Response status: %s %s", res.status, res.reason)
+-        log.debug("Response headers: %s", dict(res.getheaders()))
++        log.debug("Response headers: %s", dict(res.headers))
+         log.debug("Response data: %s [...]", res.read()[:100])
+         if res.status != 200:
+             if res.status == 401:
+diff --git a/third_party/python/urllib3/urllib3/contrib/pyopenssl.py b/third_party/python/urllib3/urllib3/contrib/pyopenssl.py
+index 0cabab1aed..1ed214b1d7 100644
+--- a/third_party/python/urllib3/urllib3/contrib/pyopenssl.py
++++ b/third_party/python/urllib3/urllib3/contrib/pyopenssl.py
+@@ -47,10 +47,10 @@ compression in Python 2 (see `CRIME attack`_).
+ """
+ from __future__ import absolute_import
+ 
++import OpenSSL.crypto
+ import OpenSSL.SSL
+ from cryptography import x509
+ from cryptography.hazmat.backends.openssl import backend as openssl_backend
+-from cryptography.hazmat.backends.openssl.x509 import _Certificate
+ 
+ try:
+     from cryptography.x509 import UnsupportedExtension
+@@ -73,9 +73,19 @@ except ImportError:  # Platform-specific: Python 3
+ import logging
+ import ssl
+ import sys
++import warnings
+ 
+ from .. import util
+ from ..packages import six
++from ..util.ssl_ import PROTOCOL_TLS_CLIENT
++
++warnings.warn(
++    "'urllib3.contrib.pyopenssl' module is deprecated and will be removed "
++    "in a future release of urllib3 2.x. Read more in this issue: "
++    "https://github.com/urllib3/urllib3/issues/2680",
++    category=DeprecationWarning,
++    stacklevel=2,
++)
+ 
+ __all__ = ["inject_into_urllib3", "extract_from_urllib3"]
+ 
+@@ -85,6 +95,7 @@ HAS_SNI = True
+ # Map from urllib3 to PyOpenSSL compatible parameter-values.
+ _openssl_versions = {
+     util.PROTOCOL_TLS: OpenSSL.SSL.SSLv23_METHOD,
++    PROTOCOL_TLS_CLIENT: OpenSSL.SSL.SSLv23_METHOD,
+     ssl.PROTOCOL_TLSv1: OpenSSL.SSL.TLSv1_METHOD,
+ }
+ 
+@@ -217,9 +228,8 @@ def get_subj_alt_name(peer_cert):
+     if hasattr(peer_cert, "to_cryptography"):
+         cert = peer_cert.to_cryptography()
+     else:
+-        # This is technically using private APIs, but should work across all
+-        # relevant versions before PyOpenSSL got a proper API for this.
+-        cert = _Certificate(openssl_backend, peer_cert._x509)
++        der = OpenSSL.crypto.dump_certificate(OpenSSL.crypto.FILETYPE_ASN1, peer_cert)
++        cert = x509.load_der_x509_certificate(der, openssl_backend)
+ 
+     # We want to find the SAN extension. Ask Cryptography to locate it (it's
+     # faster than looping in Python)
+@@ -404,7 +414,6 @@ if _fileobject:  # Platform-specific: Python 2
+         self._makefile_refs += 1
+         return _fileobject(self, mode, bufsize, close=True)
+ 
+-
+ else:  # Platform-specific: Python 3
+     makefile = backport_makefile
+ 
+diff --git a/third_party/python/urllib3/urllib3/contrib/securetransport.py b/third_party/python/urllib3/urllib3/contrib/securetransport.py
+index ab092de67a..6c46a3b9f0 100644
+--- a/third_party/python/urllib3/urllib3/contrib/securetransport.py
++++ b/third_party/python/urllib3/urllib3/contrib/securetransport.py
+@@ -67,6 +67,7 @@ import weakref
+ import six
+ 
+ from .. import util
++from ..util.ssl_ import PROTOCOL_TLS_CLIENT
+ from ._securetransport.bindings import CoreFoundation, Security, SecurityConst
+ from ._securetransport.low_level import (
+     _assert_no_error,
+@@ -154,7 +155,8 @@ CIPHER_SUITES = [
+ # TLSv1 and a high of TLSv1.2. For everything else, we pin to that version.
+ # TLSv1 to 1.2 are supported on macOS 10.8+
+ _protocol_to_min_max = {
+-    util.PROTOCOL_TLS: (SecurityConst.kTLSProtocol1, SecurityConst.kTLSProtocol12)
++    util.PROTOCOL_TLS: (SecurityConst.kTLSProtocol1, SecurityConst.kTLSProtocol12),
++    PROTOCOL_TLS_CLIENT: (SecurityConst.kTLSProtocol1, SecurityConst.kTLSProtocol12),
+ }
+ 
+ if hasattr(ssl, "PROTOCOL_SSLv2"):
+@@ -768,7 +770,6 @@ if _fileobject:  # Platform-specific: Python 2
+         self._makefile_refs += 1
+         return _fileobject(self, mode, bufsize, close=True)
+ 
+-
+ else:  # Platform-specific: Python 3
+ 
+     def makefile(self, mode="r", buffering=None, *args, **kwargs):
+diff --git a/third_party/python/urllib3/urllib3/contrib/socks.py b/third_party/python/urllib3/urllib3/contrib/socks.py
+index 93df8325d5..c326e80dd1 100644
+--- a/third_party/python/urllib3/urllib3/contrib/socks.py
++++ b/third_party/python/urllib3/urllib3/contrib/socks.py
+@@ -51,7 +51,7 @@ except ImportError:
+         (
+             "SOCKS support in urllib3 requires the installation of optional "
+             "dependencies: specifically, PySocks.  For more information, see "
+-            "https://urllib3.readthedocs.io/en/latest/contrib.html#socks-proxies"
++            "https://urllib3.readthedocs.io/en/1.26.x/contrib.html#socks-proxies"
+         ),
+         DependencyWarning,
+     )
+diff --git a/third_party/python/urllib3/urllib3/exceptions.py b/third_party/python/urllib3/urllib3/exceptions.py
+index d69958d5df..cba6f3f560 100644
+--- a/third_party/python/urllib3/urllib3/exceptions.py
++++ b/third_party/python/urllib3/urllib3/exceptions.py
+@@ -289,7 +289,17 @@ class ProxySchemeUnknown(AssertionError, URLSchemeUnknown):
+     # TODO(t-8ch): Stop inheriting from AssertionError in v2.0.
+ 
+     def __init__(self, scheme):
+-        message = "Not supported proxy scheme %s" % scheme
++        # 'localhost' is here because our URL parser parses
++        # localhost:8080 -> scheme=localhost, remove if we fix this.
++        if scheme == "localhost":
++            scheme = None
++        if scheme is None:
++            message = "Proxy URL had no scheme, should start with http:// or https://"
++        else:
++            message = (
++                "Proxy URL had unsupported scheme %s, should use http:// or https://"
++                % scheme
++            )
+         super(ProxySchemeUnknown, self).__init__(message)
+ 
+ 
+diff --git a/third_party/python/urllib3/urllib3/packages/__init__.py b/third_party/python/urllib3/urllib3/packages/__init__.py
+index fce4caa65d..e69de29bb2 100644
+--- a/third_party/python/urllib3/urllib3/packages/__init__.py
++++ b/third_party/python/urllib3/urllib3/packages/__init__.py
+@@ -1,5 +0,0 @@
+-from __future__ import absolute_import
+-
+-from . import ssl_match_hostname
+-
+-__all__ = ("ssl_match_hostname",)
+diff --git a/third_party/python/urllib3/urllib3/packages/backports/weakref_finalize.py b/third_party/python/urllib3/urllib3/packages/backports/weakref_finalize.py
+new file mode 100644
+index 0000000000..a2f2966e54
+--- /dev/null
++++ b/third_party/python/urllib3/urllib3/packages/backports/weakref_finalize.py
+@@ -0,0 +1,155 @@
++# -*- coding: utf-8 -*-
++"""
++backports.weakref_finalize
++~~~~~~~~~~~~~~~~~~
++
++Backports the Python 3 ``weakref.finalize`` method.
++"""
++from __future__ import absolute_import
++
++import itertools
++import sys
++from weakref import ref
++
++__all__ = ["weakref_finalize"]
++
++
++class weakref_finalize(object):
++    """Class for finalization of weakrefable objects
++    finalize(obj, func, *args, **kwargs) returns a callable finalizer
++    object which will be called when obj is garbage collected. The
++    first time the finalizer is called it evaluates func(*arg, **kwargs)
++    and returns the result. After this the finalizer is dead, and
++    calling it just returns None.
++    When the program exits any remaining finalizers for which the
++    atexit attribute is true will be run in reverse order of creation.
++    By default atexit is true.
++    """
++
++    # Finalizer objects don't have any state of their own.  They are
++    # just used as keys to lookup _Info objects in the registry.  This
++    # ensures that they cannot be part of a ref-cycle.
++
++    __slots__ = ()
++    _registry = {}
++    _shutdown = False
++    _index_iter = itertools.count()
++    _dirty = False
++    _registered_with_atexit = False
++
++    class _Info(object):
++        __slots__ = ("weakref", "func", "args", "kwargs", "atexit", "index")
++
++    def __init__(self, obj, func, *args, **kwargs):
++        if not self._registered_with_atexit:
++            # We may register the exit function more than once because
++            # of a thread race, but that is harmless
++            import atexit
++
++            atexit.register(self._exitfunc)
++            weakref_finalize._registered_with_atexit = True
++        info = self._Info()
++        info.weakref = ref(obj, self)
++        info.func = func
++        info.args = args
++        info.kwargs = kwargs or None
++        info.atexit = True
++        info.index = next(self._index_iter)
++        self._registry[self] = info
++        weakref_finalize._dirty = True
++
++    def __call__(self, _=None):
++        """If alive then mark as dead and return func(*args, **kwargs);
++        otherwise return None"""
++        info = self._registry.pop(self, None)
++        if info and not self._shutdown:
++            return info.func(*info.args, **(info.kwargs or {}))
++
++    def detach(self):
++        """If alive then mark as dead and return (obj, func, args, kwargs);
++        otherwise return None"""
++        info = self._registry.get(self)
++        obj = info and info.weakref()
++        if obj is not None and self._registry.pop(self, None):
++            return (obj, info.func, info.args, info.kwargs or {})
++
++    def peek(self):
++        """If alive then return (obj, func, args, kwargs);
++        otherwise return None"""
++        info = self._registry.get(self)
++        obj = info and info.weakref()
++        if obj is not None:
++            return (obj, info.func, info.args, info.kwargs or {})
++
++    @property
++    def alive(self):
++        """Whether finalizer is alive"""
++        return self in self._registry
++
++    @property
++    def atexit(self):
++        """Whether finalizer should be called at exit"""
++        info = self._registry.get(self)
++        return bool(info) and info.atexit
++
++    @atexit.setter
++    def atexit(self, value):
++        info = self._registry.get(self)
++        if info:
++            info.atexit = bool(value)
++
++    def __repr__(self):
++        info = self._registry.get(self)
++        obj = info and info.weakref()
++        if obj is None:
++            return "<%s object at %#x; dead>" % (type(self).__name__, id(self))
++        else:
++            return "<%s object at %#x; for %r at %#x>" % (
++                type(self).__name__,
++                id(self),
++                type(obj).__name__,
++                id(obj),
++            )
++
++    @classmethod
++    def _select_for_exit(cls):
++        # Return live finalizers marked for exit, oldest first
++        L = [(f, i) for (f, i) in cls._registry.items() if i.atexit]
++        L.sort(key=lambda item: item[1].index)
++        return [f for (f, i) in L]
++
++    @classmethod
++    def _exitfunc(cls):
++        # At shutdown invoke finalizers for which atexit is true.
++        # This is called once all other non-daemonic threads have been
++        # joined.
++        reenable_gc = False
++        try:
++            if cls._registry:
++                import gc
++
++                if gc.isenabled():
++                    reenable_gc = True
++                    gc.disable()
++                pending = None
++                while True:
++                    if pending is None or weakref_finalize._dirty:
++                        pending = cls._select_for_exit()
++                        weakref_finalize._dirty = False
++                    if not pending:
++                        break
++                    f = pending.pop()
++                    try:
++                        # gc is disabled, so (assuming no daemonic
++                        # threads) the following is the only line in
++                        # this function which might trigger creation
++                        # of a new finalizer
++                        f()
++                    except Exception:
++                        sys.excepthook(*sys.exc_info())
++                    assert f not in cls._registry
++        finally:
++            # prevent any more finalizers from executing during shutdown
++            weakref_finalize._shutdown = True
++            if reenable_gc:
++                gc.enable()
+diff --git a/third_party/python/urllib3/urllib3/packages/six.py b/third_party/python/urllib3/urllib3/packages/six.py
+index 314424099f..f099a3dcd2 100644
+--- a/third_party/python/urllib3/urllib3/packages/six.py
++++ b/third_party/python/urllib3/urllib3/packages/six.py
+@@ -1,4 +1,4 @@
+-# Copyright (c) 2010-2019 Benjamin Peterson
++# Copyright (c) 2010-2020 Benjamin Peterson
+ #
+ # Permission is hereby granted, free of charge, to any person obtaining a copy
+ # of this software and associated documentation files (the "Software"), to deal
+@@ -29,7 +29,7 @@ import sys
+ import types
+ 
+ __author__ = "Benjamin Peterson <benjamin@python.org>"
+-__version__ = "1.12.0"
++__version__ = "1.16.0"
+ 
+ 
+ # Useful for very coarse version differentiation.
+@@ -71,6 +71,11 @@ else:
+             MAXSIZE = int((1 << 63) - 1)
+         del X
+ 
++if PY34:
++    from importlib.util import spec_from_loader
++else:
++    spec_from_loader = None
++
+ 
+ def _add_doc(func, doc):
+     """Add documentation to a function."""
+@@ -182,6 +187,11 @@ class _SixMetaPathImporter(object):
+             return self
+         return None
+ 
++    def find_spec(self, fullname, path, target=None):
++        if fullname in self.known_modules:
++            return spec_from_loader(fullname, self)
++        return None
++
+     def __get_module(self, fullname):
+         try:
+             return self.known_modules[fullname]
+@@ -220,6 +230,12 @@ class _SixMetaPathImporter(object):
+ 
+     get_source = get_code  # same as get_code
+ 
++    def create_module(self, spec):
++        return self.load_module(spec.name)
++
++    def exec_module(self, module):
++        pass
++
+ 
+ _importer = _SixMetaPathImporter(__name__)
+ 
+@@ -260,9 +276,19 @@ _moved_attributes = [
+     ),
+     MovedModule("builtins", "__builtin__"),
+     MovedModule("configparser", "ConfigParser"),
++    MovedModule(
++        "collections_abc",
++        "collections",
++        "collections.abc" if sys.version_info >= (3, 3) else "collections",
++    ),
+     MovedModule("copyreg", "copy_reg"),
+     MovedModule("dbm_gnu", "gdbm", "dbm.gnu"),
+-    MovedModule("_dummy_thread", "dummy_thread", "_dummy_thread"),
++    MovedModule("dbm_ndbm", "dbm", "dbm.ndbm"),
++    MovedModule(
++        "_dummy_thread",
++        "dummy_thread",
++        "_dummy_thread" if sys.version_info < (3, 9) else "_thread",
++    ),
+     MovedModule("http_cookiejar", "cookielib", "http.cookiejar"),
+     MovedModule("http_cookies", "Cookie", "http.cookies"),
+     MovedModule("html_entities", "htmlentitydefs", "html.entities"),
+@@ -307,7 +333,9 @@ _moved_attributes = [
+ ]
+ # Add windows specific modules.
+ if sys.platform == "win32":
+-    _moved_attributes += [MovedModule("winreg", "_winreg")]
++    _moved_attributes += [
++        MovedModule("winreg", "_winreg"),
++    ]
+ 
+ for attr in _moved_attributes:
+     setattr(_MovedItems, attr.name, attr)
+@@ -476,7 +504,7 @@ class Module_six_moves_urllib_robotparser(_LazyModule):
+ 
+ 
+ _urllib_robotparser_moved_attributes = [
+-    MovedAttribute("RobotFileParser", "robotparser", "urllib.robotparser")
++    MovedAttribute("RobotFileParser", "robotparser", "urllib.robotparser"),
+ ]
+ for attr in _urllib_robotparser_moved_attributes:
+     setattr(Module_six_moves_urllib_robotparser, attr.name, attr)
+@@ -678,9 +706,11 @@ if PY3:
+     if sys.version_info[1] <= 1:
+         _assertRaisesRegex = "assertRaisesRegexp"
+         _assertRegex = "assertRegexpMatches"
++        _assertNotRegex = "assertNotRegexpMatches"
+     else:
+         _assertRaisesRegex = "assertRaisesRegex"
+         _assertRegex = "assertRegex"
++        _assertNotRegex = "assertNotRegex"
+ else:
+ 
+     def b(s):
+@@ -707,6 +737,7 @@ else:
+     _assertCountEqual = "assertItemsEqual"
+     _assertRaisesRegex = "assertRaisesRegexp"
+     _assertRegex = "assertRegexpMatches"
++    _assertNotRegex = "assertNotRegexpMatches"
+ _add_doc(b, """Byte literal""")
+ _add_doc(u, """Text literal""")
+ 
+@@ -723,6 +754,10 @@ def assertRegex(self, *args, **kwargs):
+     return getattr(self, _assertRegex)(*args, **kwargs)
+ 
+ 
++def assertNotRegex(self, *args, **kwargs):
++    return getattr(self, _assertNotRegex)(*args, **kwargs)
++
++
+ if PY3:
+     exec_ = getattr(moves.builtins, "exec")
+ 
+@@ -737,7 +772,6 @@ if PY3:
+             value = None
+             tb = None
+ 
+-
+ else:
+ 
+     def exec_(_code_, _globs_=None, _locs_=None):
+@@ -750,7 +784,7 @@ else:
+             del frame
+         elif _locs_ is None:
+             _locs_ = _globs_
+-        exec("""exec _code_ in _globs_, _locs_""")
++        exec ("""exec _code_ in _globs_, _locs_""")
+ 
+     exec_(
+         """def reraise(tp, value, tb=None):
+@@ -762,18 +796,7 @@ else:
+     )
+ 
+ 
+-if sys.version_info[:2] == (3, 2):
+-    exec_(
+-        """def raise_from(value, from_value):
+-    try:
+-        if from_value is None:
+-            raise value
+-        raise value from from_value
+-    finally:
+-        value = None
+-"""
+-    )
+-elif sys.version_info[:2] > (3, 2):
++if sys.version_info[:2] > (3,):
+     exec_(
+         """def raise_from(value, from_value):
+     try:
+@@ -863,19 +886,41 @@ if sys.version_info[:2] < (3, 3):
+ _add_doc(reraise, """Reraise an exception.""")
+ 
+ if sys.version_info[0:2] < (3, 4):
++    # This does exactly the same what the :func:`py3:functools.update_wrapper`
++    # function does on Python versions after 3.2. It sets the ``__wrapped__``
++    # attribute on ``wrapper`` object and it doesn't raise an error if any of
++    # the attributes mentioned in ``assigned`` and ``updated`` are missing on
++    # ``wrapped`` object.
++    def _update_wrapper(
++        wrapper,
++        wrapped,
++        assigned=functools.WRAPPER_ASSIGNMENTS,
++        updated=functools.WRAPPER_UPDATES,
++    ):
++        for attr in assigned:
++            try:
++                value = getattr(wrapped, attr)
++            except AttributeError:
++                continue
++            else:
++                setattr(wrapper, attr, value)
++        for attr in updated:
++            getattr(wrapper, attr).update(getattr(wrapped, attr, {}))
++        wrapper.__wrapped__ = wrapped
++        return wrapper
++
++    _update_wrapper.__doc__ = functools.update_wrapper.__doc__
+ 
+     def wraps(
+         wrapped,
+         assigned=functools.WRAPPER_ASSIGNMENTS,
+         updated=functools.WRAPPER_UPDATES,
+     ):
+-        def wrapper(f):
+-            f = functools.wraps(wrapped, assigned, updated)(f)
+-            f.__wrapped__ = wrapped
+-            return f
+-
+-        return wrapper
++        return functools.partial(
++            _update_wrapper, wrapped=wrapped, assigned=assigned, updated=updated
++        )
+ 
++    wraps.__doc__ = functools.wraps.__doc__
+ 
+ else:
+     wraps = functools.wraps
+@@ -888,7 +933,15 @@ def with_metaclass(meta, *bases):
+     # the actual metaclass.
+     class metaclass(type):
+         def __new__(cls, name, this_bases, d):
+-            return meta(name, bases, d)
++            if sys.version_info[:2] >= (3, 7):
++                # This version introduced PEP 560 that requires a bit
++                # of extra care (we mimic what is done by __build_class__).
++                resolved_bases = types.resolve_bases(bases)
++                if resolved_bases is not bases:
++                    d["__orig_bases__"] = bases
++            else:
++                resolved_bases = bases
++            return meta(name, resolved_bases, d)
+ 
+         @classmethod
+         def __prepare__(cls, name, this_bases):
+@@ -928,12 +981,11 @@ def ensure_binary(s, encoding="utf-8", errors="strict"):
+       - `str` -> encoded to `bytes`
+       - `bytes` -> `bytes`
+     """
++    if isinstance(s, binary_type):
++        return s
+     if isinstance(s, text_type):
+         return s.encode(encoding, errors)
+-    elif isinstance(s, binary_type):
+-        return s
+-    else:
+-        raise TypeError("not expecting type '%s'" % type(s))
++    raise TypeError("not expecting type '%s'" % type(s))
+ 
+ 
+ def ensure_str(s, encoding="utf-8", errors="strict"):
+@@ -947,12 +999,15 @@ def ensure_str(s, encoding="utf-8", errors="strict"):
+       - `str` -> `str`
+       - `bytes` -> decoded to `str`
+     """
+-    if not isinstance(s, (text_type, binary_type)):
+-        raise TypeError("not expecting type '%s'" % type(s))
++    # Optimization: Fast return for the common case.
++    if type(s) is str:
++        return s
+     if PY2 and isinstance(s, text_type):
+-        s = s.encode(encoding, errors)
++        return s.encode(encoding, errors)
+     elif PY3 and isinstance(s, binary_type):
+-        s = s.decode(encoding, errors)
++        return s.decode(encoding, errors)
++    elif not isinstance(s, (text_type, binary_type)):
++        raise TypeError("not expecting type '%s'" % type(s))
+     return s
+ 
+ 
+@@ -977,7 +1032,7 @@ def ensure_text(s, encoding="utf-8", errors="strict"):
+ 
+ def python_2_unicode_compatible(klass):
+     """
+-    A decorator that defines __unicode__ and __str__ methods under Python 2.
++    A class decorator that defines __unicode__ and __str__ methods under Python 2.
+     Under Python 3 it does nothing.
+ 
+     To support Python 2 and 3 with a single code base, define a __str__ method
+diff --git a/third_party/python/urllib3/urllib3/packages/ssl_match_hostname/__init__.py b/third_party/python/urllib3/urllib3/packages/ssl_match_hostname/__init__.py
+deleted file mode 100644
+index 6b12fd90aa..0000000000
+--- a/third_party/python/urllib3/urllib3/packages/ssl_match_hostname/__init__.py
++++ /dev/null
+@@ -1,22 +0,0 @@
+-import sys
+-
+-try:
+-    # Our match_hostname function is the same as 3.5's, so we only want to
+-    # import the match_hostname function if it's at least that good.
+-    if sys.version_info < (3, 5):
+-        raise ImportError("Fallback to vendored code")
+-
+-    from ssl import CertificateError, match_hostname
+-except ImportError:
+-    try:
+-        # Backport of the function from a pypi module
+-        from backports.ssl_match_hostname import (  # type: ignore
+-            CertificateError,
+-            match_hostname,
+-        )
+-    except ImportError:
+-        # Our vendored copy
+-        from ._implementation import CertificateError, match_hostname  # type: ignore
+-
+-# Not needed, but documenting what we provide.
+-__all__ = ("CertificateError", "match_hostname")
+diff --git a/third_party/python/urllib3/urllib3/poolmanager.py b/third_party/python/urllib3/urllib3/poolmanager.py
+index 3a31a285bf..14b10daf3a 100644
+--- a/third_party/python/urllib3/urllib3/poolmanager.py
++++ b/third_party/python/urllib3/urllib3/poolmanager.py
+@@ -34,6 +34,7 @@ SSL_KEYWORDS = (
+     "ca_cert_dir",
+     "ssl_context",
+     "key_password",
++    "server_hostname",
+ )
+ 
+ # All known keyword arguments that could be provided to the pool manager, its
+@@ -170,7 +171,7 @@ class PoolManager(RequestMethods):
+     def __init__(self, num_pools=10, headers=None, **connection_pool_kw):
+         RequestMethods.__init__(self, headers)
+         self.connection_pool_kw = connection_pool_kw
+-        self.pools = RecentlyUsedContainer(num_pools, dispose_func=lambda p: p.close())
++        self.pools = RecentlyUsedContainer(num_pools)
+ 
+         # Locally set the pool classes and keys so other PoolManagers can
+         # override them.
+diff --git a/third_party/python/urllib3/urllib3/request.py b/third_party/python/urllib3/urllib3/request.py
+index 398386a5b9..3b4cf99922 100644
+--- a/third_party/python/urllib3/urllib3/request.py
++++ b/third_party/python/urllib3/urllib3/request.py
+@@ -1,6 +1,9 @@
+ from __future__ import absolute_import
+ 
++import sys
++
+ from .filepost import encode_multipart_formdata
++from .packages import six
+ from .packages.six.moves.urllib.parse import urlencode
+ 
+ __all__ = ["RequestMethods"]
+@@ -168,3 +171,21 @@ class RequestMethods(object):
+         extra_kw.update(urlopen_kw)
+ 
+         return self.urlopen(method, url, **extra_kw)
++
++
++if not six.PY2:
++
++    class RequestModule(sys.modules[__name__].__class__):
++        def __call__(self, *args, **kwargs):
++            """
++            If user tries to call this module directly urllib3 v2.x style raise an error to the user
++            suggesting they may need urllib3 v2
++            """
++            raise TypeError(
++                "'module' object is not callable\n"
++                "urllib3.request() method is not supported in this release, "
++                "upgrade to urllib3 v2 to use it\n"
++                "see https://urllib3.readthedocs.io/en/stable/v2-migration-guide.html"
++            )
++
++    sys.modules[__name__].__class__ = RequestModule
+diff --git a/third_party/python/urllib3/urllib3/response.py b/third_party/python/urllib3/urllib3/response.py
+index 38693f4fc6..0bd13d40b8 100644
+--- a/third_party/python/urllib3/urllib3/response.py
++++ b/third_party/python/urllib3/urllib3/response.py
+@@ -2,16 +2,22 @@ from __future__ import absolute_import
+ 
+ import io
+ import logging
++import sys
++import warnings
+ import zlib
+ from contextlib import contextmanager
+ from socket import error as SocketError
+ from socket import timeout as SocketTimeout
+ 
+ try:
+-    import brotli
++    try:
++        import brotlicffi as brotli
++    except ImportError:
++        import brotli
+ except ImportError:
+     brotli = None
+ 
++from . import util
+ from ._collections import HTTPHeaderDict
+ from .connection import BaseSSLError, HTTPException
+ from .exceptions import (
+@@ -478,6 +484,54 @@ class HTTPResponse(io.IOBase):
+             if self._original_response and self._original_response.isclosed():
+                 self.release_conn()
+ 
++    def _fp_read(self, amt):
++        """
++        Read a response with the thought that reading the number of bytes
++        larger than can fit in a 32-bit int at a time via SSL in some
++        known cases leads to an overflow error that has to be prevented
++        if `amt` or `self.length_remaining` indicate that a problem may
++        happen.
++
++        The known cases:
++          * 3.8 <= CPython < 3.9.7 because of a bug
++            https://github.com/urllib3/urllib3/issues/2513#issuecomment-1152559900.
++          * urllib3 injected with pyOpenSSL-backed SSL-support.
++          * CPython < 3.10 only when `amt` does not fit 32-bit int.
++        """
++        assert self._fp
++        c_int_max = 2 ** 31 - 1
++        if (
++            (
++                (amt and amt > c_int_max)
++                or (self.length_remaining and self.length_remaining > c_int_max)
++            )
++            and not util.IS_SECURETRANSPORT
++            and (util.IS_PYOPENSSL or sys.version_info < (3, 10))
++        ):
++            buffer = io.BytesIO()
++            # Besides `max_chunk_amt` being a maximum chunk size, it
++            # affects memory overhead of reading a response by this
++            # method in CPython.
++            # `c_int_max` equal to 2 GiB - 1 byte is the actual maximum
++            # chunk size that does not lead to an overflow error, but
++            # 256 MiB is a compromise.
++            max_chunk_amt = 2 ** 28
++            while amt is None or amt != 0:
++                if amt is not None:
++                    chunk_amt = min(amt, max_chunk_amt)
++                    amt -= chunk_amt
++                else:
++                    chunk_amt = max_chunk_amt
++                data = self._fp.read(chunk_amt)
++                if not data:
++                    break
++                buffer.write(data)
++                del data  # to reduce peak memory usage by `max_chunk_amt`.
++            return buffer.getvalue()
++        else:
++            # StringIO doesn't like amt=None
++            return self._fp.read(amt) if amt is not None else self._fp.read()
++
+     def read(self, amt=None, decode_content=None, cache_content=False):
+         """
+         Similar to :meth:`http.client.HTTPResponse.read`, but with two additional
+@@ -510,13 +564,11 @@ class HTTPResponse(io.IOBase):
+         fp_closed = getattr(self._fp, "closed", False)
+ 
+         with self._error_catcher():
++            data = self._fp_read(amt) if not fp_closed else b""
+             if amt is None:
+-                # cStringIO doesn't like amt=None
+-                data = self._fp.read() if not fp_closed else b""
+                 flush_decoder = True
+             else:
+                 cache_content = False
+-                data = self._fp.read(amt) if not fp_closed else b""
+                 if (
+                     amt != 0 and not data
+                 ):  # Platform-specific: Buggy versions of Python.
+@@ -612,9 +664,21 @@ class HTTPResponse(io.IOBase):
+ 
+     # Backwards-compatibility methods for http.client.HTTPResponse
+     def getheaders(self):
++        warnings.warn(
++            "HTTPResponse.getheaders() is deprecated and will be removed "
++            "in urllib3 v2.1.0. Instead access HTTPResponse.headers directly.",
++            category=DeprecationWarning,
++            stacklevel=2,
++        )
+         return self.headers
+ 
+     def getheader(self, name, default=None):
++        warnings.warn(
++            "HTTPResponse.getheader() is deprecated and will be removed "
++            "in urllib3 v2.1.0. Instead use HTTPResponse.headers.get(name, default).",
++            category=DeprecationWarning,
++            stacklevel=2,
++        )
+         return self.headers.get(name, default)
+ 
+     # Backwards compatibility for http.cookiejar
+diff --git a/third_party/python/urllib3/urllib3/util/connection.py b/third_party/python/urllib3/urllib3/util/connection.py
+index cd57455748..6af1138f26 100644
+--- a/third_party/python/urllib3/urllib3/util/connection.py
++++ b/third_party/python/urllib3/urllib3/util/connection.py
+@@ -2,9 +2,8 @@ from __future__ import absolute_import
+ 
+ import socket
+ 
+-from urllib3.exceptions import LocationParseError
+-
+ from ..contrib import _appengine_environ
++from ..exceptions import LocationParseError
+ from ..packages import six
+ from .wait import NoWayToWaitForSocketError, wait_for_read
+ 
+@@ -118,7 +117,7 @@ def allowed_gai_family():
+ 
+ 
+ def _has_ipv6(host):
+-    """ Returns True if the system can bind an IPv6 address. """
++    """Returns True if the system can bind an IPv6 address."""
+     sock = None
+     has_ipv6 = False
+ 
+diff --git a/third_party/python/urllib3/urllib3/util/proxy.py b/third_party/python/urllib3/urllib3/util/proxy.py
+index 34f884d5b3..2199cc7b7f 100644
+--- a/third_party/python/urllib3/urllib3/util/proxy.py
++++ b/third_party/python/urllib3/urllib3/util/proxy.py
+@@ -45,6 +45,7 @@ def create_proxy_ssl_context(
+         ssl_version=resolve_ssl_version(ssl_version),
+         cert_reqs=resolve_cert_reqs(cert_reqs),
+     )
++
+     if (
+         not ca_certs
+         and not ca_cert_dir
+diff --git a/third_party/python/urllib3/urllib3/util/request.py b/third_party/python/urllib3/urllib3/util/request.py
+index 25103383ec..b574b081e9 100644
+--- a/third_party/python/urllib3/urllib3/util/request.py
++++ b/third_party/python/urllib3/urllib3/util/request.py
+@@ -14,7 +14,10 @@ SKIPPABLE_HEADERS = frozenset(["accept-encoding", "host", "user-agent"])
+ 
+ ACCEPT_ENCODING = "gzip,deflate"
+ try:
+-    import brotli as _unused_module_brotli  # noqa: F401
++    try:
++        import brotlicffi as _unused_module_brotli  # noqa: F401
++    except ImportError:
++        import brotli as _unused_module_brotli  # noqa: F401
+ except ImportError:
+     pass
+ else:
+diff --git a/third_party/python/urllib3/urllib3/util/retry.py b/third_party/python/urllib3/urllib3/util/retry.py
+index ee51f922f8..60ef6c4f3f 100644
+--- a/third_party/python/urllib3/urllib3/util/retry.py
++++ b/third_party/python/urllib3/urllib3/util/retry.py
+@@ -37,7 +37,7 @@ class _RetryMeta(type):
+     def DEFAULT_METHOD_WHITELIST(cls):
+         warnings.warn(
+             "Using 'Retry.DEFAULT_METHOD_WHITELIST' is deprecated and "
+-            "will be removed in v2.0. Use 'Retry.DEFAULT_METHODS_ALLOWED' instead",
++            "will be removed in v2.0. Use 'Retry.DEFAULT_ALLOWED_METHODS' instead",
+             DeprecationWarning,
+         )
+         return cls.DEFAULT_ALLOWED_METHODS
+@@ -69,6 +69,24 @@ class _RetryMeta(type):
+         )
+         cls.DEFAULT_REMOVE_HEADERS_ON_REDIRECT = value
+ 
++    @property
++    def BACKOFF_MAX(cls):
++        warnings.warn(
++            "Using 'Retry.BACKOFF_MAX' is deprecated and "
++            "will be removed in v2.0. Use 'Retry.DEFAULT_BACKOFF_MAX' instead",
++            DeprecationWarning,
++        )
++        return cls.DEFAULT_BACKOFF_MAX
++
++    @BACKOFF_MAX.setter
++    def BACKOFF_MAX(cls, value):
++        warnings.warn(
++            "Using 'Retry.BACKOFF_MAX' is deprecated and "
++            "will be removed in v2.0. Use 'Retry.DEFAULT_BACKOFF_MAX' instead",
++            DeprecationWarning,
++        )
++        cls.DEFAULT_BACKOFF_MAX = value
++
+ 
+ @six.add_metaclass(_RetryMeta)
+ class Retry(object):
+@@ -181,7 +199,7 @@ class Retry(object):
+ 
+         seconds. If the backoff_factor is 0.1, then :func:`.sleep` will sleep
+         for [0.0s, 0.2s, 0.4s, ...] between retries. It will never be longer
+-        than :attr:`Retry.BACKOFF_MAX`.
++        than :attr:`Retry.DEFAULT_BACKOFF_MAX`.
+ 
+         By default, backoff is disabled (set to 0).
+ 
+@@ -217,10 +235,10 @@ class Retry(object):
+     RETRY_AFTER_STATUS_CODES = frozenset([413, 429, 503])
+ 
+     #: Default headers to be used for ``remove_headers_on_redirect``
+-    DEFAULT_REMOVE_HEADERS_ON_REDIRECT = frozenset(["Authorization"])
++    DEFAULT_REMOVE_HEADERS_ON_REDIRECT = frozenset(["Cookie", "Authorization"])
+ 
+     #: Maximum backoff time.
+-    BACKOFF_MAX = 120
++    DEFAULT_BACKOFF_MAX = 120
+ 
+     def __init__(
+         self,
+@@ -253,6 +271,7 @@ class Retry(object):
+                 "Using 'method_whitelist' with Retry is deprecated and "
+                 "will be removed in v2.0. Use 'allowed_methods' instead",
+                 DeprecationWarning,
++                stacklevel=2,
+             )
+             allowed_methods = method_whitelist
+         if allowed_methods is _Default:
+@@ -320,7 +339,7 @@ class Retry(object):
+ 
+     @classmethod
+     def from_int(cls, retries, redirect=True, default=None):
+-        """ Backwards-compatibility for the old retries format."""
++        """Backwards-compatibility for the old retries format."""
+         if retries is None:
+             retries = default if default is not None else cls.DEFAULT
+ 
+@@ -347,7 +366,7 @@ class Retry(object):
+             return 0
+ 
+         backoff_value = self.backoff_factor * (2 ** (consecutive_errors_len - 1))
+-        return min(self.BACKOFF_MAX, backoff_value)
++        return min(self.DEFAULT_BACKOFF_MAX, backoff_value)
+ 
+     def parse_retry_after(self, retry_after):
+         # Whitespace: https://tools.ietf.org/html/rfc7230#section-3.2.4
+@@ -373,9 +392,9 @@ class Retry(object):
+         return seconds
+ 
+     def get_retry_after(self, response):
+-        """ Get the value of Retry-After in seconds. """
++        """Get the value of Retry-After in seconds."""
+ 
+-        retry_after = response.getheader("Retry-After")
++        retry_after = response.headers.get("Retry-After")
+ 
+         if retry_after is None:
+             return None
+@@ -467,7 +486,7 @@ class Retry(object):
+         )
+ 
+     def is_exhausted(self):
+-        """ Are we out of retries? """
++        """Are we out of retries?"""
+         retry_counts = (
+             self.total,
+             self.connect,
+diff --git a/third_party/python/urllib3/urllib3/util/ssl_.py b/third_party/python/urllib3/urllib3/util/ssl_.py
+index 1cb5e7cdc1..8f867812a5 100644
+--- a/third_party/python/urllib3/urllib3/util/ssl_.py
++++ b/third_party/python/urllib3/urllib3/util/ssl_.py
+@@ -44,13 +44,21 @@ _const_compare_digest = getattr(hmac, "compare_digest", _const_compare_digest_ba
+ 
+ try:  # Test for SSL features
+     import ssl
+-    from ssl import HAS_SNI  # Has SNI?
+     from ssl import CERT_REQUIRED, wrap_socket
++except ImportError:
++    pass
++
++try:
++    from ssl import HAS_SNI  # Has SNI?
++except ImportError:
++    pass
+ 
++try:
+     from .ssltransport import SSLTransport
+ except ImportError:
+     pass
+ 
++
+ try:  # Platform-specific: Python 3.6
+     from ssl import PROTOCOL_TLS
+ 
+@@ -63,6 +71,11 @@ except ImportError:
+     except ImportError:
+         PROTOCOL_SSLv23 = PROTOCOL_TLS = 2
+ 
++try:
++    from ssl import PROTOCOL_TLS_CLIENT
++except ImportError:
++    PROTOCOL_TLS_CLIENT = PROTOCOL_TLS
++
+ 
+ try:
+     from ssl import OP_NO_COMPRESSION, OP_NO_SSLv2, OP_NO_SSLv3
+@@ -151,7 +164,7 @@ except ImportError:
+                 "urllib3 from configuring SSL appropriately and may cause "
+                 "certain SSL connections to fail. You can upgrade to a newer "
+                 "version of Python to solve this. For more information, see "
+-                "https://urllib3.readthedocs.io/en/latest/advanced-usage.html"
++                "https://urllib3.readthedocs.io/en/1.26.x/advanced-usage.html"
+                 "#ssl-warnings",
+                 InsecurePlatformWarning,
+             )
+@@ -270,7 +283,11 @@ def create_urllib3_context(
+         Constructed SSLContext object with specified options
+     :rtype: SSLContext
+     """
+-    context = SSLContext(ssl_version or PROTOCOL_TLS)
++    # PROTOCOL_TLS is deprecated in Python 3.10
++    if not ssl_version or ssl_version == PROTOCOL_TLS:
++        ssl_version = PROTOCOL_TLS_CLIENT
++
++    context = SSLContext(ssl_version)
+ 
+     context.set_ciphers(ciphers or DEFAULT_CIPHERS)
+ 
+@@ -305,13 +322,25 @@ def create_urllib3_context(
+     ) is not None:
+         context.post_handshake_auth = True
+ 
+-    context.verify_mode = cert_reqs
+-    if (
+-        getattr(context, "check_hostname", None) is not None
+-    ):  # Platform-specific: Python 3.2
+-        # We do our own verification, including fingerprints and alternative
+-        # hostnames. So disable it here
+-        context.check_hostname = False
++    def disable_check_hostname():
++        if (
++            getattr(context, "check_hostname", None) is not None
++        ):  # Platform-specific: Python 3.2
++            # We do our own verification, including fingerprints and alternative
++            # hostnames. So disable it here
++            context.check_hostname = False
++
++    # The order of the below lines setting verify_mode and check_hostname
++    # matter due to safe-guards SSLContext has to prevent an SSLContext with
++    # check_hostname=True, verify_mode=NONE/OPTIONAL. This is made even more
++    # complex because we don't know whether PROTOCOL_TLS_CLIENT will be used
++    # or not so we don't know the initial state of the freshly created SSLContext.
++    if cert_reqs == ssl.CERT_REQUIRED:
++        context.verify_mode = cert_reqs
++        disable_check_hostname()
++    else:
++        disable_check_hostname()
++        context.verify_mode = cert_reqs
+ 
+     # Enable logging of TLS session keys via defacto standard environment variable
+     # 'SSLKEYLOGFILE', if the feature is available (Python 3.8+). Skip empty values.
+@@ -393,7 +422,7 @@ def ssl_wrap_socket(
+     try:
+         if hasattr(context, "set_alpn_protocols"):
+             context.set_alpn_protocols(ALPN_PROTOCOLS)
+-    except NotImplementedError:
++    except NotImplementedError:  # Defensive: in CI, we always have set_alpn_protocols
+         pass
+ 
+     # If we detect server_hostname is an IP address then the SNI
+@@ -411,7 +440,7 @@ def ssl_wrap_socket(
+             "This may cause the server to present an incorrect TLS "
+             "certificate, which can cause validation failures. You can upgrade to "
+             "a newer version of Python to solve this. For more information, see "
+-            "https://urllib3.readthedocs.io/en/latest/advanced-usage.html"
++            "https://urllib3.readthedocs.io/en/1.26.x/advanced-usage.html"
+             "#ssl-warnings",
+             SNIMissingWarning,
+         )
+diff --git a/third_party/python/urllib3/urllib3/packages/ssl_match_hostname/_implementation.py b/third_party/python/urllib3/urllib3/util/ssl_match_hostname.py
+similarity index 92%
+rename from third_party/python/urllib3/urllib3/packages/ssl_match_hostname/_implementation.py
+rename to third_party/python/urllib3/urllib3/util/ssl_match_hostname.py
+index 689208d3c6..1dd950c489 100644
+--- a/third_party/python/urllib3/urllib3/packages/ssl_match_hostname/_implementation.py
++++ b/third_party/python/urllib3/urllib3/util/ssl_match_hostname.py
+@@ -9,7 +9,7 @@ import sys
+ # ipaddress has been backported to 2.6+ in pypi.  If it is installed on the
+ # system, use it to handle IPAddress ServerAltnames (this was added in
+ # python-3.5) otherwise only do DNS matching.  This allows
+-# backports.ssl_match_hostname to continue to be used in Python 2.7.
++# util.ssl_match_hostname to continue to be used in Python 2.7.
+ try:
+     import ipaddress
+ except ImportError:
+@@ -78,7 +78,8 @@ def _dnsname_match(dn, hostname, max_wildcards=1):
+ 
+ def _to_unicode(obj):
+     if isinstance(obj, str) and sys.version_info < (3,):
+-        obj = unicode(obj, encoding="ascii", errors="strict")
++        # ignored flake8 # F821 to support python 2.7 function
++        obj = unicode(obj, encoding="ascii", errors="strict")  # noqa: F821
+     return obj
+ 
+ 
+@@ -111,11 +112,9 @@ def match_hostname(cert, hostname):
+     try:
+         # Divergence from upstream: ipaddress can't handle byte str
+         host_ip = ipaddress.ip_address(_to_unicode(hostname))
+-    except ValueError:
+-        # Not an IP address (common case)
+-        host_ip = None
+-    except UnicodeError:
+-        # Divergence from upstream: Have to deal with ipaddress not taking
++    except (UnicodeError, ValueError):
++        # ValueError: Not an IP address (common case)
++        # UnicodeError: Divergence from upstream: Have to deal with ipaddress not taking
+         # byte strings.  addresses should be all ascii, so we consider it not
+         # an ipaddress in this case
+         host_ip = None
+@@ -123,7 +122,7 @@ def match_hostname(cert, hostname):
+         # Divergence from upstream: Make ipaddress library optional
+         if ipaddress is None:
+             host_ip = None
+-        else:
++        else:  # Defensive
+             raise
+     dnsnames = []
+     san = cert.get("subjectAltName", ())
+diff --git a/third_party/python/urllib3/urllib3/util/ssltransport.py b/third_party/python/urllib3/urllib3/util/ssltransport.py
+index 1e41354f5d..4a7105d179 100644
+--- a/third_party/python/urllib3/urllib3/util/ssltransport.py
++++ b/third_party/python/urllib3/urllib3/util/ssltransport.py
+@@ -2,8 +2,8 @@ import io
+ import socket
+ import ssl
+ 
+-from urllib3.exceptions import ProxySchemeUnsupported
+-from urllib3.packages import six
++from ..exceptions import ProxySchemeUnsupported
++from ..packages import six
+ 
+ SSL_BLOCKSIZE = 16384
+ 
+@@ -193,7 +193,7 @@ class SSLTransport:
+                 raise
+ 
+     def _ssl_io_loop(self, func, *args):
+-        """ Performs an I/O loop between incoming/outgoing and the socket."""
++        """Performs an I/O loop between incoming/outgoing and the socket."""
+         should_loop = True
+         ret = None
+ 
+diff --git a/third_party/python/urllib3/urllib3/util/timeout.py b/third_party/python/urllib3/urllib3/util/timeout.py
+index ff69593b05..78e18a6272 100644
+--- a/third_party/python/urllib3/urllib3/util/timeout.py
++++ b/third_party/python/urllib3/urllib3/util/timeout.py
+@@ -2,9 +2,8 @@ from __future__ import absolute_import
+ 
+ import time
+ 
+-# The default socket timeout, used by httplib to indicate that no timeout was
+-# specified by the user
+-from socket import _GLOBAL_DEFAULT_TIMEOUT
++# The default socket timeout, used by httplib to indicate that no timeout was; specified by the user
++from socket import _GLOBAL_DEFAULT_TIMEOUT, getdefaulttimeout
+ 
+ from ..exceptions import TimeoutStateError
+ 
+@@ -116,6 +115,10 @@ class Timeout(object):
+     # __str__ provided for backwards compatibility
+     __str__ = __repr__
+ 
++    @classmethod
++    def resolve_default_timeout(cls, timeout):
++        return getdefaulttimeout() if timeout is cls.DEFAULT_TIMEOUT else timeout
++
+     @classmethod
+     def _validate_timeout(cls, value, name):
+         """Check that a timeout attribute is valid.
+diff --git a/third_party/python/urllib3/urllib3/util/url.py b/third_party/python/urllib3/urllib3/util/url.py
+index 6ff238fe3c..e5682d3be4 100644
+--- a/third_party/python/urllib3/urllib3/util/url.py
++++ b/third_party/python/urllib3/urllib3/util/url.py
+@@ -50,7 +50,7 @@ _variations = [
+     "(?:(?:%(hex)s:){0,6}%(hex)s)?::",
+ ]
+ 
+-UNRESERVED_PAT = r"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789._!\-~"
++UNRESERVED_PAT = r"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789._\-~"
+ IPV6_PAT = "(?:" + "|".join([x % _subs for x in _variations]) + ")"
+ ZONE_ID_PAT = "(?:%25|%)(?:[" + UNRESERVED_PAT + "]|%[a-fA-F0-9]{2})+"
+ IPV6_ADDRZ_PAT = r"\[" + IPV6_PAT + r"(?:" + ZONE_ID_PAT + r")?\]"
+@@ -63,12 +63,12 @@ IPV6_ADDRZ_RE = re.compile("^" + IPV6_ADDRZ_PAT + "$")
+ BRACELESS_IPV6_ADDRZ_RE = re.compile("^" + IPV6_ADDRZ_PAT[2:-2] + "$")
+ ZONE_ID_RE = re.compile("(" + ZONE_ID_PAT + r")\]$")
+ 
+-SUBAUTHORITY_PAT = (u"^(?:(.*)@)?(%s|%s|%s)(?::([0-9]{0,5}))?$") % (
++_HOST_PORT_PAT = ("^(%s|%s|%s)(?::0*?(|0|[1-9][0-9]{0,4}))?$") % (
+     REG_NAME_PAT,
+     IPV4_PAT,
+     IPV6_ADDRZ_PAT,
+ )
+-SUBAUTHORITY_RE = re.compile(SUBAUTHORITY_PAT, re.UNICODE | re.DOTALL)
++_HOST_PORT_RE = re.compile(_HOST_PORT_PAT, re.UNICODE | re.DOTALL)
+ 
+ UNRESERVED_CHARS = set(
+     "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789._-~"
+@@ -279,6 +279,9 @@ def _normalize_host(host, scheme):
+         if scheme in NORMALIZABLE_SCHEMES:
+             is_ipv6 = IPV6_ADDRZ_RE.match(host)
+             if is_ipv6:
++                # IPv6 hosts of the form 'a::b%zone' are encoded in a URL as
++                # such per RFC 6874: 'a::b%25zone'. Unquote the ZoneID
++                # separator as necessary to return a valid RFC 4007 scoped IP.
+                 match = ZONE_ID_RE.search(host)
+                 if match:
+                     start, end = match.span(1)
+@@ -300,7 +303,7 @@ def _normalize_host(host, scheme):
+ 
+ 
+ def _idna_encode(name):
+-    if name and any([ord(x) > 128 for x in name]):
++    if name and any(ord(x) >= 128 for x in name):
+         try:
+             import idna
+         except ImportError:
+@@ -331,7 +334,7 @@ def parse_url(url):
+     """
+     Given a url, return a parsed :class:`.Url` namedtuple. Best-effort is
+     performed to parse incomplete urls. Fields not provided will be None.
+-    This parser is RFC 3986 compliant.
++    This parser is RFC 3986 and RFC 6874 compliant.
+ 
+     The parser logic and helper functions are based heavily on
+     work done in the ``rfc3986`` module.
+@@ -365,7 +368,9 @@ def parse_url(url):
+             scheme = scheme.lower()
+ 
+         if authority:
+-            auth, host, port = SUBAUTHORITY_RE.match(authority).groups()
++            auth, _, host_port = authority.rpartition("@")
++            auth = auth or None
++            host, port = _HOST_PORT_RE.match(host_port).groups()
+             if auth and normalize_uri:
+                 auth = _encode_invalid_chars(auth, USERINFO_CHARS)
+             if port == "":
+diff --git a/third_party/python/urllib3/urllib3/util/wait.py b/third_party/python/urllib3/urllib3/util/wait.py
+index c280646c7b..21b4590b3d 100644
+--- a/third_party/python/urllib3/urllib3/util/wait.py
++++ b/third_party/python/urllib3/urllib3/util/wait.py
+@@ -42,7 +42,6 @@ if sys.version_info >= (3, 5):
+     def _retry_on_intr(fn, timeout):
+         return fn(timeout)
+ 
+-
+ else:
+     # Old and broken Pythons.
+     def _retry_on_intr(fn, timeout):
+diff --git a/tools/browsertime/mach_commands.py b/tools/browsertime/mach_commands.py
+index 4850c82b75..68e9e3d5e7 100644
+--- a/tools/browsertime/mach_commands.py
++++ b/tools/browsertime/mach_commands.py
+@@ -81,9 +81,9 @@ def silence():
+ 
+ def node_path(command_context):
+     import platform
+-    from distutils.version import StrictVersion
+ 
+     from mozbuild.nodeutil import find_node_executable
++    from packaging.version import Version
+ 
+     state_dir = command_context._mach_context.state_dir
+     cache_path = os.path.join(state_dir, "browsertime", "node-16")
+@@ -97,7 +97,7 @@ def node_path(command_context):
+     )
+ 
+     # Check standard locations first
+-    node_exe = find_node_executable(min_version=StrictVersion(MIN_NODE_VERSION))
++    node_exe = find_node_executable(min_version=Version(MIN_NODE_VERSION))
+     if node_exe and (node_exe[0] is not None):
+         return os.path.abspath(node_exe[0])
+     if not os.path.exists(cache_path):
+diff --git a/tools/lint/clippy.yml b/tools/lint/clippy.yml
+index f735295d40..8eb8b60da9 100644
+--- a/tools/lint/clippy.yml
++++ b/tools/lint/clippy.yml
+@@ -101,7 +101,7 @@ clippy:
+     # the version of cargo-clippy is:
+     # clippy 0.1.65 (2019147 2022-09-19)
+     # we use the date instead to facilitate the check
+-    # replacing - by . because Python StrictVersion expects this
++    # replacing - by . because Python packaging.version.Version expects this
+     min_clippy_version: 2022.09.19
+     type: external
+     payload: clippy:lint
+diff --git a/tools/moztreedocs/mach_commands.py b/tools/moztreedocs/mach_commands.py
+index 6f44c65c20..84bdaf79fb 100644
+--- a/tools/moztreedocs/mach_commands.py
++++ b/tools/moztreedocs/mach_commands.py
+@@ -21,6 +21,7 @@ import yaml
+ from mach.decorators import Command, CommandArgument, SubCommand
+ from mach.registrar import Registrar
+ from mozbuild.util import memoize
++from mozfile import load_source
+ 
+ here = os.path.abspath(os.path.dirname(__file__))
+ topsrcdir = os.path.abspath(os.path.dirname(os.path.dirname(here)))
+@@ -363,11 +364,8 @@ def toggle_no_autodoc():
+ 
+ @memoize
+ def _read_project_properties():
+-    import imp
+-
+     path = os.path.normpath(manager().conf_py_path)
+-    with open(path, "r") as fh:
+-        conf = imp.load_module("doc_conf", fh, path, (".py", "r", imp.PY_SOURCE))
++    conf = load_source("doc_conf", path)
+ 
+     # Prefer the Mozilla project name, falling back to Sphinx's
+     # default variable if it isn't defined.
+diff --git a/tools/power/mach_commands.py b/tools/power/mach_commands.py
+index 956dcdf440..117a96e1c7 100644
+--- a/tools/power/mach_commands.py
++++ b/tools/power/mach_commands.py
+@@ -2,16 +2,15 @@
+ # License, v. 2.0. If a copy of the MPL was not distributed with this
+ # file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ 
+-from distutils.version import StrictVersion
+-
+ from mach.decorators import Command, CommandArgument
++from packaging.version import Version
+ 
+ 
+ def is_osx_10_10_or_greater(cls):
+     import platform
+ 
+     release = platform.mac_ver()[0]
+-    return release and StrictVersion(release) >= StrictVersion("10.10")
++    return release and Version(release) >= Version("10.10")
+ 
+ 
+ # Get system power consumption and related measurements.
+diff --git a/tools/tryselect/test/test_mozharness_integration.py b/tools/tryselect/test/test_mozharness_integration.py
+index 984f8de25b..abeaaf370e 100644
+--- a/tools/tryselect/test/test_mozharness_integration.py
++++ b/tools/tryselect/test/test_mozharness_integration.py
+@@ -2,12 +2,12 @@
+ # License, v. 2.0. If a copy of the MPL was not distributed with this
+ # file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ 
+-import imp
+ import json
+ import os
+ 
+ import mozunit
+ import pytest
++from mozfile import load_source
+ from tryselect.tasks import build, resolve_tests_by_suite
+ 
+ MOZHARNESS_SCRIPTS = {
+@@ -55,10 +55,10 @@ uses).
+ 
+ 
+ def get_mozharness_test_paths(name):
+-    scriptdir = os.path.join(build.topsrcdir, "testing", "mozharness", "scripts")
+-
+-    files = imp.find_module(name, [scriptdir])
+-    mod = imp.load_module("scripts.{}".format(name), *files)
++    scriptdir = os.path.join(build.topsrcdir, "testing", "mozharness")
++    mod = load_source(
++        "scripts." + name, os.path.join(scriptdir, "scripts", name + ".py")
++    )
+ 
+     class_name = MOZHARNESS_SCRIPTS[name]["class_name"]
+     cls = getattr(mod, class_name)
+@@ -82,13 +82,15 @@ def all_suites():
+ 
+ 
+ def generate_suites_from_config(path):
+-    configdir = os.path.join(build.topsrcdir, "testing", "mozharness", "configs")
+-
+     parent, name = os.path.split(path)
+     name = os.path.splitext(name)[0]
+ 
+-    files = imp.find_module("{}".format(name), [os.path.join(configdir, parent)])
+-    mod = imp.load_module("config.{}".format(name), *files)
++    configdir = os.path.join(
++        build.topsrcdir, "testing", "mozharness", "configs", parent
++    )
++
++    mod = load_source(name, os.path.join(configdir, name + ".py"))
++
+     config = mod.config
+ 
+     for category in sorted(config["suite_definitions"]):
+-- 
+2.43.0
+
