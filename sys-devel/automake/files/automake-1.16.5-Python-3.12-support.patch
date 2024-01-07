@@ -1,0 +1,25 @@
+From 4b771f3231482b177ed5e7bebe3f82af9e24dea9 Mon Sep 17 00:00:00 2001
+From: root <root@akrolf516z33>
+Date: Sun, 7 Jan 2024 10:17:31 +0000
+Subject: [PATCH] Python 3.12 support
+
+---
+ t/ax/am-test-lib.sh | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/t/ax/am-test-lib.sh b/t/ax/am-test-lib.sh
+index 547b82b..c3f1d1e 100644
+--- a/t/ax/am-test-lib.sh
++++ b/t/ax/am-test-lib.sh
+@@ -631,7 +631,7 @@ xsi_shell_code='
+ python_has_pep3147 ()
+ {
+   if test -z "$am_pep3147_tag"; then
+-    am_pep3147_tag=$($PYTHON -c 'import imp; print(imp.get_tag())') \
++    am_pep3147_tag=$($PYTHON -c 'import sys; print(sys.implementation.cache_tag)') \
+       || am_pep3147_tag=none
+   fi
+   test $am_pep3147_tag != none
+-- 
+2.43.0
+
