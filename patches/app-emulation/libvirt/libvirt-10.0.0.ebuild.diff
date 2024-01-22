@@ -1,0 +1,11 @@
+--- /var/db/repos/gentoo/app-emulation/libvirt/libvirt-10.0.0.ebuild	2024-01-19 06:20:58.650081767 +0000
++++ /var/db/repos/jhatler-overlay/app-emulation/libvirt/libvirt-10.0.0.ebuild	2024-01-19 17:16:56.692288591 +0000
+@@ -10,7 +10,7 @@
+ # app-emulation/libvirt
+ # Please bump them together!
+ 
+-PYTHON_COMPAT=( python3_{9..11} )
++PYTHON_COMPAT=( python3_{9..12} )
+ VERIFY_SIG_OPENPGP_KEY_PATH=/usr/share/openpgp-keys/libvirt.org.asc
+ inherit meson linux-info python-any-r1 readme.gentoo-r1 tmpfiles verify-sig
+ 
