@@ -1,0 +1,11 @@
+--- /var/db/repos/gentoo/dev-util/re2c/re2c-3.1.ebuild	2024-01-22 21:03:46.757582445 +0000
++++ /var/db/repos/jhatler-overlay/dev-util/re2c/re2c-3.1.ebuild	2024-01-22 21:15:49.524289637 +0000
+@@ -3,7 +3,7 @@
+ 
+ EAPI=8
+ 
+-PYTHON_COMPAT=( python3_{9..11} )
++PYTHON_COMPAT=( python3_{9..12} )
+ 
+ inherit python-any-r1
+ 
