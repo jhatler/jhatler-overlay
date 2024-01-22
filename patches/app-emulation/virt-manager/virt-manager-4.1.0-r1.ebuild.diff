@@ -1,0 +1,11 @@
+--- /var/db/repos/gentoo/app-emulation/virt-manager/virt-manager-4.1.0-r1.ebuild	2023-12-26 18:42:41.302584485 +0000
++++ /var/db/repos/jhatler-overlay/app-emulation/virt-manager/virt-manager-4.1.0-r1.ebuild	2024-01-10 22:46:05.312000479 +0000
+@@ -3,7 +3,7 @@
+ 
+ EAPI=8
+ 
+-PYTHON_COMPAT=( python3_{9..11} )
++PYTHON_COMPAT=( python3_{9..12} )
+ DISTUTILS_SINGLE_IMPL=1
+ DISTUTILS_USE_SETUPTOOLS=no
+ inherit gnome2 distutils-r1 optfeature
