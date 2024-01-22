@@ -1,0 +1,24 @@
+--- /var/db/repos/gentoo/sys-devel/clang/clang-17.0.6.ebuild	2024-01-19 06:20:58.793415108 +0000
++++ /var/db/repos/jhatler-overlay/sys-devel/clang/clang-17.0.6.ebuild	2024-01-22 20:51:22.230874039 +0000
+@@ -17,7 +17,7 @@
+ LICENSE="Apache-2.0-with-LLVM-exceptions UoI-NCSA MIT"
+ SLOT="${LLVM_MAJOR}/${LLVM_SOABI}"
+ KEYWORDS="amd64 ~arm arm64 ~loong ~ppc ~ppc64 ~riscv ~sparc x86 ~amd64-linux ~x64-macos"
+-IUSE="debug doc +extra ieee-long-double +pie +static-analyzer test xml"
++IUSE="debug doc +extra ieee-long-double lto +pie +polly +static-analyzer test xml"
+ REQUIRED_USE="${PYTHON_REQUIRED_USE}"
+ RESTRICT="!test? ( test )"
+ 
+@@ -297,6 +297,12 @@
+ 		)
+ 	fi
+ 
++	use polly && mycmakeargs+=(
++		-DLLVM_POLLY_LINK_INTO_TOOLS=ON
++	)
++
++	use lto && mycmakeargs+=( -DLLVM_ENABLE_LTO="Thin" )
++
+ 	use test && mycmakeargs+=(
+ 		-DLLVM_BUILD_TESTS=ON
+ 		-DLLVM_LIT_ARGS="$(get_lit_flags)"
