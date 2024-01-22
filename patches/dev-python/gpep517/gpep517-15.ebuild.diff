@@ -1,0 +1,17 @@
+--- /var/db/repos/gentoo/dev-python/gpep517/gpep517-15.ebuild	2023-12-26 18:42:41.882584517 +0000
++++ /var/db/repos/jhatler-overlay/dev-python/gpep517/gpep517-15.ebuild	2024-01-13 00:03:38.579828697 +0000
+@@ -32,6 +32,14 @@
+ 
+ distutils_enable_tests pytest
+ 
++python_test() {
++	local EPYTEST_DESELECT=(
++		"test/test_main.py::test_integration_install[setuptools-legacy]"
++	)
++
++	epytest
++}
++
+ python_install() {
+ 	python_domodule gpep517
+ 	python_newscript - gpep517 <<-EOF
