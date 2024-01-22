@@ -1,0 +1,23 @@
+--- /var/db/repos/gentoo/media-libs/opus/opus-1.4.ebuild	2024-01-19 06:20:58.743415105 +0000
++++ /var/db/repos/jhatler-overlay/media-libs/opus/opus-1.4.ebuild	2024-01-10 23:04:04.832024984 +0000
+@@ -1,9 +1,9 @@
+-# Copyright 1999-2024 Gentoo Authors
++# Copyright 1999-2023 Gentoo Authors
+ # Distributed under the terms of the GNU General Public License v2
+ 
+ EAPI=8
+ 
+-PYTHON_COMPAT=( python3_{9..11} )
++PYTHON_COMPAT=( python3_{9..12} )
+ inherit flag-o-matic meson-multilib python-any-r1
+ 
+ DESCRIPTION="Open codec for interactive speech and music transmission over the Internet"
+@@ -20,7 +20,7 @@
+ BDEPEND="
+ 	${PYTHON_DEPS}
+ 	doc? (
+-		app-text/doxygen
++		app-doc/doxygen
+ 		media-gfx/graphviz
+ 	)
+ "
