@@ -1,0 +1,20 @@
+--- /var/db/repos/gentoo/app-shells/bash-completion/bash-completion-2.11.ebuild	2023-12-26 18:42:41.385917823 +0000
++++ /var/db/repos/jhatler-overlay/app-shells/bash-completion/bash-completion-2.11.ebuild	2024-01-11 23:46:42.430709521 +0000
+@@ -4,7 +4,7 @@
+ EAPI=8
+ 
+ BASHCOMP_P=bashcomp-2.0.3
+-PYTHON_COMPAT=( python3_{9..11} )
++PYTHON_COMPAT=( python3_{9..12} )
+ 
+ inherit python-any-r1
+ 
+@@ -107,7 +107,7 @@
+ 	local -x NETWORK=none
+ 	local -x PYTEST_DISABLE_PLUGIN_AUTOLOAD=1
+ 	emake -C completions check
+-	epytest
++	epytest --rootdir="${S}" --config-file="${S}"/test/setup.cfg
+ }
+ 
+ src_install() {
